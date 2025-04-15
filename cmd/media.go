@@ -3,14 +3,13 @@ package main
 import (
 	"context"
 	"fmt"
-	"io"
 	"sync"
 	"time"
 
 	"github.com/gen2brain/malgo"
 	"github.com/pion/webrtc/v3"
 	"github.com/pion/webrtc/v3/pkg/media"
-	"github.com/shenjinti/go722"
+	"github.com/shenjinti/go711"
 	"github.com/sirupsen/logrus"
 )
 
@@ -19,8 +18,6 @@ type MediaHandler struct {
 	ctx            context.Context
 	cancel         context.CancelFunc
 	logger         *logrus.Logger
-	encoder        *go722.G722Encoder
-	decoder        *go722.G722Decoder
 	peerConnection *webrtc.PeerConnection
 	audioTrack     *webrtc.TrackLocalStaticSample
 	buffer         []byte
@@ -40,10 +37,6 @@ type MediaHandler struct {
 func NewMediaHandler(ctx context.Context, logger *logrus.Logger) (*MediaHandler, error) {
 	ctx, cancel := context.WithCancel(ctx)
 
-	// Create G.722 encoder and decoder
-	encoder := go722.NewG722Encoder(go722.Rate48000, 0)
-	decoder := go722.NewG722Decoder(go722.Rate48000, 0)
-
 	// Initialize playback context
 	playbackCtx, err := malgo.InitContext(nil, malgo.ContextConfig{}, nil)
 	if err != nil {
@@ -55,8 +48,6 @@ func NewMediaHandler(ctx context.Context, logger *logrus.Logger) (*MediaHandler,
 		ctx:            ctx,
 		cancel:         cancel,
 		logger:         logger,
-		encoder:        encoder,
-		decoder:        decoder,
 		buffer:         make([]byte, 0, 16000), // Buffer for 1 second of audio at 16kHz
 		sequenceNumber: 0,
 		timestamp:      0,
@@ -65,7 +56,19 @@ func NewMediaHandler(ctx context.Context, logger *logrus.Logger) (*MediaHandler,
 }
 
 func (mh *MediaHandler) Setup() (string, error) {
-	peerConnection, err := webrtc.NewPeerConnection(webrtc.Configuration{
+	mediaEngine := webrtc.MediaEngine{}
+	mediaEngine.RegisterCodec(
+		webrtc.RTPCodecParameters{
+			RTPCodecCapability: webrtc.RTPCodecCapability{
+				MimeType:  webrtc.MimeTypePCMU,
+				ClockRate: 8000,
+			},
+			PayloadType: 0,
+		},
+		webrtc.RTPCodecTypeAudio,
+	)
+	api := webrtc.NewAPI(webrtc.WithMediaEngine(&mediaEngine))
+	peerConnection, err := api.NewPeerConnection(webrtc.Configuration{
 		ICEServers: []webrtc.ICEServer{
 			{
 				URLs: []string{"stun:stun.l.google.com:19302"},
@@ -79,35 +82,21 @@ func (mh *MediaHandler) Setup() (string, error) {
 
 	// Create audio track
 	audioTrack, err := webrtc.NewTrackLocalStaticSample(webrtc.RTPCodecCapability{
-		MimeType:  webrtc.MimeTypeG722,
-		ClockRate: 16000,
+		MimeType:  webrtc.MimeTypePCMU,
+		ClockRate: 8000,
 		Channels:  1,
-	}, "audio", "rustpbxgo")
+	}, "rustpbxgo-audio", "rustpbxgo-audio")
 	if err != nil {
 		return "", fmt.Errorf("failed to create audio track: %w", err)
 	}
 	// Add track to peer connection
-	rtpSender, err := peerConnection.AddTrack(audioTrack)
+	_, err = peerConnection.AddTrack(audioTrack)
 	if err != nil {
 		return "", fmt.Errorf("failed to add track to peer connection: %w", err)
 	}
 	mh.audioTrack = audioTrack
-
-	if rtpSender != nil {
-		go func() {
-			for {
-				if _, _, rtcpErr := rtpSender.ReadRTCP(); rtcpErr != nil {
-					if rtcpErr == io.EOF {
-						return
-					}
-					mh.logger.Errorf("Failed to read RTCP packet: %v", rtcpErr)
-					continue
-				}
-			}
-		}()
-	}
 	peerConnection.OnTrack(func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
-		mh.logger.Infof("Track remote added %v", track)
+		mh.logger.Infof("Track remote added %v %s", track.ID(), track.Codec().MimeType)
 		go func() {
 			for mh.connected {
 				if mh.ctx.Err() != nil {
@@ -119,8 +108,7 @@ func (mh *MediaHandler) Setup() (string, error) {
 					break
 				}
 
-				// Decode G.722 data to PCM
-				audioData := mh.decoder.Decode(rtpPacket.Payload)
+				audioData, _ := go711.DecodePCMU(rtpPacket.Payload)
 				// Add to playback buffer
 				mh.playbackMutex.Lock()
 				mh.playbackBuffer = append(mh.playbackBuffer, audioData...)
@@ -144,6 +132,9 @@ func (mh *MediaHandler) Setup() (string, error) {
 	peerConnection.OnICECandidate(func(candidate *webrtc.ICECandidate) {
 		mh.logger.Infof("ICE candidate: %v", candidate)
 	})
+	peerConnection.OnICEConnectionStateChange(func(state webrtc.ICEConnectionState) {
+		mh.logger.Infof("ICE connection state: %v", state)
+	})
 	offer, err := peerConnection.CreateOffer(nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create offer: %w", err)
@@ -152,9 +143,9 @@ func (mh *MediaHandler) Setup() (string, error) {
 
 	select {
 	case <-webrtc.GatheringCompletePromise(peerConnection):
-		mh.logger.Info("Gathering complete")
+		mh.logger.Info("ICE Gathering complete")
 	case <-time.After(20 * time.Second):
-		mh.logger.Warn("Gathering timeout")
+		mh.logger.Warn("ICE Gathering timeout")
 		return "", fmt.Errorf("gathering timeout")
 	}
 	offerSdp := peerConnection.LocalDescription().SDP
@@ -166,25 +157,13 @@ func (mh *MediaHandler) SetupAnswer(answer string) error {
 		Type: webrtc.SDPTypeAnswer,
 		SDP:  answer,
 	}
-	err := mh.peerConnection.SetRemoteDescription(remoteOffer)
-	if err != nil {
-		return fmt.Errorf("failed to set remote description: %w", err)
-	}
-
-	select {
-	case <-webrtc.GatheringCompletePromise(mh.peerConnection):
-		mh.logger.Info("Gathering complete")
-	case <-time.After(10 * time.Second):
-		mh.logger.Warn("Gathering timeout")
-		return fmt.Errorf("gathering timeout")
-	}
-
-	return nil
+	return mh.peerConnection.SetRemoteDescription(remoteOffer)
 }
 
 // encodeAndSendAudio encodes audio to G.722 and sends it via WebRTC
 func (mh *MediaHandler) encodeAndSendAudio() {
 	ticker := time.NewTicker(20 * time.Millisecond)
+	framesize := int(20 * int(mh.captureDevice.SampleRate()) / 1000 * 2)
 	for mh.connected {
 		select {
 		case <-ticker.C:
@@ -192,22 +171,22 @@ func (mh *MediaHandler) encodeAndSendAudio() {
 			return
 		}
 		mh.bufferMutex.Lock()
-		if len(mh.buffer) < 640 { // 20ms at 48kHz
+		if len(mh.buffer) < framesize { // 20ms at 8khz
 			mh.bufferMutex.Unlock()
 			continue
 		}
 
 		// Get audio data from buffer
-		audioData := mh.buffer[:640]
-		mh.buffer = mh.buffer[640:]
+		audioData := mh.buffer[:framesize]
+		mh.buffer = mh.buffer[framesize:]
 		mh.bufferMutex.Unlock()
 
-		audioData = mh.encoder.Encode(audioData)
-
+		payload, _ := go711.EncodePCMU(audioData)
 		// Create media sample
 		sample := media.Sample{
-			Data:     audioData,
-			Duration: 20 * time.Millisecond,
+			Data:      payload,
+			Duration:  20 * time.Millisecond,
+			Timestamp: time.Now(),
 		}
 		// Send via WebRTC
 		err := mh.audioTrack.WriteSample(sample)
@@ -254,7 +233,7 @@ func (mh *MediaHandler) initPlaybackDevice() error {
 	deviceConfig := malgo.DefaultDeviceConfig(malgo.Playback)
 	deviceConfig.Playback.Format = malgo.FormatS16
 	deviceConfig.Playback.Channels = 1
-	deviceConfig.SampleRate = 16000
+	deviceConfig.SampleRate = 8000
 	deviceConfig.Alsa.NoMMap = 1
 	// Create a buffer for decoded audio
 	mh.playbackBuffer = make([]byte, 0, 16000)
@@ -266,10 +245,8 @@ func (mh *MediaHandler) initPlaybackDevice() error {
 				return
 			}
 			mh.playbackMutex.Lock()
-			if len(mh.playbackBuffer) >= 640 {
-				n := copy(outputSamples, mh.playbackBuffer[:640])
-				mh.playbackBuffer = mh.playbackBuffer[n:]
-			}
+			n := copy(outputSamples, mh.playbackBuffer)
+			mh.playbackBuffer = mh.playbackBuffer[n:]
 			mh.playbackMutex.Unlock()
 		},
 	})
@@ -285,7 +262,7 @@ func (mh *MediaHandler) startAudioCapture() error {
 	deviceConfig := malgo.DefaultDeviceConfig(malgo.Capture)
 	deviceConfig.Capture.Format = malgo.FormatS16
 	deviceConfig.Capture.Channels = 1
-	deviceConfig.SampleRate = 48000
+	deviceConfig.SampleRate = 8000
 	deviceConfig.Alsa.NoMMap = 1
 
 	// Create capture device

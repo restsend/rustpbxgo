@@ -37,6 +37,9 @@ func main() {
 		rustpbxgo.WithLogger(logger),
 		rustpbxgo.WithContext(ctx),
 	)
+	client.OnEvent = func(event string, payload string) {
+		logger.Infof("Received event: %s %s", event, payload)
+	}
 	// Connect to server
 	err = client.Connect()
 	if err != nil {
@@ -70,7 +73,7 @@ func main() {
 	if err != nil {
 		logger.Fatalf("Failed to setup answer: %v", err)
 	}
-
+	client.TTS("你好,请问有什么我可以帮您?", "", "", false)
 	// Handle signals for graceful shutdown
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)

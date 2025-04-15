@@ -10,6 +10,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+type OnEvent func(event string, payload string)
 type OnIncoming func(event IncomingEvent)
 type OnAnswer func(event AnswerEvent)
 type OnReject func(event RejectEvent)
@@ -38,6 +39,7 @@ type Client struct {
 	logger                   *logrus.Logger
 	id                       string
 	onAnswer                 OnAnswer
+	OnEvent                  OnEvent
 	OnIncoming               OnIncoming
 	OnReject                 OnReject
 	OnHangup                 OnHangup
@@ -429,6 +431,9 @@ func (c *Client) processEvent(message []byte) {
 		return
 	}
 	c.logger.Debugf("Received event: %s %s", ev.Event, string(message))
+	if c.OnEvent != nil {
+		c.OnEvent(ev.Event, string(message))
+	}
 	switch ev.Event {
 	case "incoming":
 		var event IncomingEvent
