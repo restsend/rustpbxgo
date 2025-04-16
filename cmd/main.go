@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/joho/godotenv"
 	"github.com/restsend/rustpbxgo"
@@ -77,16 +78,21 @@ func main() {
 
 	// Handle ASR Final events
 	client.OnAsrFinal = func(event rustpbxgo.AsrFinalEvent) {
+		client.Interrupt()
 		logger.Infof("ASR Final: %s", event.Text)
 		if event.Text == "" {
 			return
 		}
+		startTime := time.Now()
 		response, shouldHangup, err := llmHandler.Query(*openaiModel, event.Text)
 		if err != nil {
 			logger.Errorf("Error querying LLM: %v", err)
 			return
 		}
-		logger.Infof("LLM shouldHangup: %v response: %s ", shouldHangup, response)
+		logger.Infof("LLM response: %s duration: %s", response, time.Since(startTime))
+		if shouldHangup != nil {
+			logger.Infof("LLM shouldHangup: %v", shouldHangup)
+		}
 		// Speak the response
 		if response != "" {
 			if err := client.TTS(response, "", "", shouldHangup != nil); err != nil {
