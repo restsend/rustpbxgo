@@ -30,7 +30,7 @@ type OnLLMFinal func(event LLMFinalEvent)
 type OnLLMDelta func(event LLMDeltaEvent)
 type OnMetrics func(event MetricsEvent)
 type OnError func(event ErrorEvent)
-
+type OnClose func(reason string)
 type Client struct {
 	ctx                      context.Context
 	cancel                   context.CancelFunc
@@ -39,6 +39,7 @@ type Client struct {
 	logger                   *logrus.Logger
 	id                       string
 	onAnswer                 OnAnswer
+	OnClose                  OnClose
 	OnEvent                  OnEvent
 	OnIncoming               OnIncoming
 	OnReject                 OnReject
@@ -249,6 +250,7 @@ type ResumeCommand struct {
 // HangupCommand ends the call
 type HangupCommand struct {
 	Command string `json:"command"`
+	Reason  string `json:"reason,omitempty"`
 }
 
 // ReferCommand transfers the call
@@ -385,6 +387,9 @@ func (c *Client) Connect() error {
 			mt, message, err := c.conn.ReadMessage()
 			if err != nil {
 				c.logger.Errorf("Error reading message: %v", err)
+				if c.OnClose != nil {
+					c.OnClose(err.Error())
+				}
 				return
 			}
 			if mt != websocket.TextMessage {
@@ -715,9 +720,10 @@ func (c *Client) Resume() error {
 }
 
 // Hangup sends a command to end the call
-func (c *Client) Hangup() error {
+func (c *Client) Hangup(reason string) error {
 	cmd := HangupCommand{
 		Command: "hangup",
+		Reason:  reason,
 	}
 	return c.sendCommand(cmd)
 }

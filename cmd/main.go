@@ -67,7 +67,10 @@ func main() {
 		rustpbxgo.WithLogger(logger),
 		rustpbxgo.WithContext(ctx),
 	)
-
+	client.OnClose = func(reason string) {
+		logger.Infof("Connection closed: %s", reason)
+		sigChan <- syscall.SIGTERM
+	}
 	client.OnEvent = func(event string, payload string) {
 		logger.Debugf("Received event: %s %s", event, payload)
 	}
@@ -89,6 +92,8 @@ func main() {
 			if err := client.TTS(response, "", "", shouldHangup != nil); err != nil {
 				logger.Errorf("Error sending TTS: %v", err)
 			}
+		} else if shouldHangup != nil {
+			client.Hangup(shouldHangup.Reason)
 		}
 	}
 	client.OnHangup = func(event rustpbxgo.HangupEvent) {
