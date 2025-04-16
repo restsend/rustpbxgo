@@ -22,6 +22,7 @@ func main() {
 	openaiModel := flag.String("openai-model", "", "OpenAI model to use")
 	openaiEndpoint := flag.String("openai-endpoint", "", "OpenAI endpoint to use")
 	systemPrompt := flag.String("system-prompt", "You are a helpful assistant. Provide concise responses. Use 'hangup' tool when the conversation is complete.", "System prompt for LLM")
+	breakOnVad := flag.Bool("break-on-vad", true, "Break on VAD")
 	flag.Parse()
 
 	if *openaiKey == "" {
@@ -68,46 +69,56 @@ func main() {
 	)
 
 	client.OnEvent = func(event string, payload string) {
-		logger.Infof("Received event: %s %s", event, payload)
+		logger.Debugf("Received event: %s %s", event, payload)
 	}
 
 	// Handle ASR Final events
 	client.OnAsrFinal = func(event rustpbxgo.AsrFinalEvent) {
 		logger.Infof("ASR Final: %s", event.Text)
-		// If there's text, query LLM
-		if event.Text != "" {
-
-			// Query LLM with the transcribed text
-			response, shouldHangup, err := llmHandler.Query(*openaiModel, event.Text)
-			if err != nil {
-				logger.Errorf("Error querying LLM: %v", err)
-				return
-			}
-			logger.Infof("LLM shouldHangup:%v response: %s ", shouldHangup, response)
-			// Speak the response
-			if response != "" {
-				logger.Infof("LLM response: %s", response)
-				if err := client.TTS(response, "", "", false); err != nil {
-					logger.Errorf("Error sending TTS: %v", err)
-				}
-			}
-
-			if shouldHangup {
-				logger.Info("LLM requested hangup, ending call")
-				client.Hangup()
-				sigChan <- syscall.SIGTERM
+		if event.Text == "" {
+			return
+		}
+		response, shouldHangup, err := llmHandler.Query(*openaiModel, event.Text)
+		if err != nil {
+			logger.Errorf("Error querying LLM: %v", err)
+			return
+		}
+		logger.Infof("LLM shouldHangup:%v response: %s ", shouldHangup, response)
+		// Speak the response
+		if response != "" {
+			if err := client.TTS(response, "", "", shouldHangup); err != nil {
+				logger.Errorf("Error sending TTS: %v", err)
 			}
 		}
+		// if shouldHangup {
+		// 	logger.Info("LLM requested hangup, ending call")
+		// 	client.Hangup()
+		// 	sigChan <- syscall.SIGTERM
+		// }
 	}
-
+	client.OnHangup = func(event rustpbxgo.HangupEvent) {
+		logger.Infof("Hangup: %s", event.Reason)
+		sigChan <- syscall.SIGTERM
+	}
 	// Handle ASR Delta events (partial results)
 	client.OnAsrDelta = func(event rustpbxgo.AsrDeltaEvent) {
 		logger.Debugf("ASR Delta: %s", event.Text)
+		if *breakOnVad {
+			return
+		}
 		if err := client.Interrupt(); err != nil {
 			logger.Warnf("Failed to interrupt TTS: %v", err)
 		}
 	}
-
+	client.OnSpeaking = func(event rustpbxgo.SpeakingEvent) {
+		if !*breakOnVad {
+			return
+		}
+		logger.Infof("Interrupting TTS")
+		if err := client.Interrupt(); err != nil {
+			logger.Warnf("Failed to interrupt TTS: %v", err)
+		}
+	}
 	// Connect to server
 	err = client.Connect()
 	if err != nil {
@@ -148,10 +159,6 @@ func main() {
 	// Initial greeting
 	client.TTS("Hello, how can I help you?", "", "", false)
 
-	// Wait for either hangup signal from LLM handler or OS signal
-	select {
-	case <-sigChan:
-		logger.Info("Shutting down due to OS signal")
-	}
+	<-sigChan
 	fmt.Println("Shutting down...")
 }

@@ -116,8 +116,6 @@ func (h *LLMHandler) Query(model, text string) (string, bool, error) {
 		for _, toolCall := range message.ToolCalls {
 			if toolCall.Function.Name == "hangup" {
 				shouldHangup = true
-				h.logger.Info("LLM requested hangup")
-
 				// Parse the arguments
 				var hangupTool HangupTool
 				if err := json.Unmarshal([]byte(toolCall.Function.Arguments), &hangupTool); err != nil {
