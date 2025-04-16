@@ -292,9 +292,9 @@ type ASROption struct {
 	AppID      string `json:"appId,omitempty"`
 	SecretID   string `json:"secretId,omitempty"`
 	SecretKey  string `json:"secretKey,omitempty"`
-	ModelType  string `json:"modelType"`
-	BufferSize int    `json:"bufferSize"`
-	SampleRate uint32 `json:"sampleRate"`
+	ModelType  string `json:"modelType,omitempty"`
+	BufferSize int    `json:"bufferSize,omitempty"`
+	SampleRate uint32 `json:"sampleRate,omitempty"`
 }
 
 type TTSOption struct {

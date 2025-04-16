@@ -10,6 +10,7 @@ import (
 	"github.com/pion/webrtc/v3"
 	"github.com/pion/webrtc/v3/pkg/media"
 	"github.com/shenjinti/go711"
+	"github.com/shenjinti/go722"
 	"github.com/sirupsen/logrus"
 )
 
@@ -55,18 +56,29 @@ func NewMediaHandler(ctx context.Context, logger *logrus.Logger) (*MediaHandler,
 	}, nil
 }
 
-func (mh *MediaHandler) Setup() (string, error) {
+func (mh *MediaHandler) Setup(codec string) (string, error) {
 	mediaEngine := webrtc.MediaEngine{}
-	mediaEngine.RegisterCodec(
-		webrtc.RTPCodecParameters{
+	var codecParams webrtc.RTPCodecParameters
+	if codec == "g722" {
+		codecParams = webrtc.RTPCodecParameters{
+			RTPCodecCapability: webrtc.RTPCodecCapability{
+				MimeType:  webrtc.MimeTypeG722,
+				ClockRate: 8000,
+			},
+			PayloadType: 9,
+		}
+	} else {
+		codecParams = webrtc.RTPCodecParameters{
 			RTPCodecCapability: webrtc.RTPCodecCapability{
 				MimeType:  webrtc.MimeTypePCMU,
 				ClockRate: 8000,
 			},
 			PayloadType: 0,
-		},
-		webrtc.RTPCodecTypeAudio,
-	)
+		}
+	}
+
+	mediaEngine.RegisterCodec(codecParams, webrtc.RTPCodecTypeAudio)
+
 	api := webrtc.NewAPI(webrtc.WithMediaEngine(&mediaEngine))
 	peerConnection, err := api.NewPeerConnection(webrtc.Configuration{
 		ICEServers: []webrtc.ICEServer{
@@ -81,11 +93,7 @@ func (mh *MediaHandler) Setup() (string, error) {
 	mh.peerConnection = peerConnection
 
 	// Create audio track
-	audioTrack, err := webrtc.NewTrackLocalStaticSample(webrtc.RTPCodecCapability{
-		MimeType:  webrtc.MimeTypePCMU,
-		ClockRate: 8000,
-		Channels:  1,
-	}, "rustpbxgo-audio", "rustpbxgo-audio")
+	audioTrack, err := webrtc.NewTrackLocalStaticSample(codecParams.RTPCodecCapability, "rustpbxgo-audio", "rustpbxgo-audio")
 	if err != nil {
 		return "", fmt.Errorf("failed to create audio track: %w", err)
 	}
@@ -97,6 +105,7 @@ func (mh *MediaHandler) Setup() (string, error) {
 	mh.audioTrack = audioTrack
 	peerConnection.OnTrack(func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
 		mh.logger.Infof("Track remote added %v %s", track.ID(), track.Codec().MimeType)
+		g722Decoder := go722.NewG722Decoder(go722.Rate64000, 0)
 		go func() {
 			for mh.connected {
 				if mh.ctx.Err() != nil {
@@ -107,8 +116,12 @@ func (mh *MediaHandler) Setup() (string, error) {
 					mh.logger.Errorf("Failed to read RTP packet: %v", err)
 					break
 				}
-
-				audioData, _ := go711.DecodePCMU(rtpPacket.Payload)
+				var audioData []byte
+				if codec == "g722" {
+					audioData = g722Decoder.Decode(rtpPacket.Payload)
+				} else {
+					audioData, _ = go711.DecodePCMU(rtpPacket.Payload)
+				}
 				// Add to playback buffer
 				mh.playbackMutex.Lock()
 				mh.playbackBuffer = append(mh.playbackBuffer, audioData...)
@@ -121,9 +134,9 @@ func (mh *MediaHandler) Setup() (string, error) {
 		mh.logger.Infof("Peer connection state: %v", state)
 		if state == webrtc.PeerConnectionStateConnected {
 			mh.connected = true
-			mh.initPlaybackDevice()
-			mh.startAudioCapture()
-			go mh.encodeAndSendAudio()
+			mh.initPlaybackDevice(codec)
+			mh.startAudioCapture(codec)
+			go mh.encodeAndSendAudio(codec)
 		}
 	})
 	peerConnection.OnICEGatheringStateChange(func(state webrtc.ICEGathererState) {
@@ -161,9 +174,10 @@ func (mh *MediaHandler) SetupAnswer(answer string) error {
 }
 
 // encodeAndSendAudio encodes audio to G.722 and sends it via WebRTC
-func (mh *MediaHandler) encodeAndSendAudio() {
+func (mh *MediaHandler) encodeAndSendAudio(codec string) {
 	ticker := time.NewTicker(20 * time.Millisecond)
 	framesize := int(20 * int(mh.captureDevice.SampleRate()) / 1000 * 2)
+	g722Encoder := go722.NewG722Encoder(go722.Rate64000, 0)
 	for mh.connected {
 		select {
 		case <-ticker.C:
@@ -180,8 +194,12 @@ func (mh *MediaHandler) encodeAndSendAudio() {
 		audioData := mh.buffer[:framesize]
 		mh.buffer = mh.buffer[framesize:]
 		mh.bufferMutex.Unlock()
-
-		payload, _ := go711.EncodePCMU(audioData)
+		var payload []byte
+		if codec == "g722" {
+			payload = g722Encoder.Encode(audioData)
+		} else {
+			payload, _ = go711.EncodePCMU(audioData)
+		}
 		// Create media sample
 		sample := media.Sample{
 			Data:      payload,
@@ -228,13 +246,16 @@ func (mh *MediaHandler) Stop() error {
 	return nil
 }
 
-func (mh *MediaHandler) initPlaybackDevice() error {
+func (mh *MediaHandler) initPlaybackDevice(codec string) error {
 	// Set up playback device
 	deviceConfig := malgo.DefaultDeviceConfig(malgo.Playback)
 	deviceConfig.Playback.Format = malgo.FormatS16
 	deviceConfig.Playback.Channels = 1
 	deviceConfig.SampleRate = 8000
 	deviceConfig.Alsa.NoMMap = 1
+	if codec == "g722" {
+		deviceConfig.SampleRate = 16000
+	}
 	// Create a buffer for decoded audio
 	mh.playbackBuffer = make([]byte, 0, 16000)
 	mh.playbackMutex = &sync.Mutex{}
@@ -258,12 +279,15 @@ func (mh *MediaHandler) initPlaybackDevice() error {
 	return playbackDevice.Start()
 }
 
-func (mh *MediaHandler) startAudioCapture() error {
+func (mh *MediaHandler) startAudioCapture(codec string) error {
 	deviceConfig := malgo.DefaultDeviceConfig(malgo.Capture)
 	deviceConfig.Capture.Format = malgo.FormatS16
 	deviceConfig.Capture.Channels = 1
 	deviceConfig.SampleRate = 8000
 	deviceConfig.Alsa.NoMMap = 1
+	if codec == "g722" {
+		deviceConfig.SampleRate = 16000
+	}
 
 	// Create capture device
 	captureDevice, err := malgo.InitDevice(mh.playbackCtx.Context, deviceConfig, malgo.DeviceCallbacks{
