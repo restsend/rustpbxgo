@@ -52,7 +52,7 @@ func NewLLMHandler(ctx context.Context, apiKey, endpoint, systemPrompt string, l
 }
 
 // Query the LLM with text and get a response
-func (h *LLMHandler) Query(model, text string) (string, bool, error) {
+func (h *LLMHandler) Query(model, text string) (string, *HangupTool, error) {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
@@ -97,7 +97,7 @@ func (h *LLMHandler) Query(model, text string) (string, bool, error) {
 	// Send the request to OpenAI
 	response, err := h.client.CreateChatCompletion(h.ctx, request)
 	if err != nil {
-		return "", false, fmt.Errorf("error querying OpenAI: %w", err)
+		return "", nil, fmt.Errorf("error querying OpenAI: %w", err)
 	}
 
 	// Process the response
@@ -105,38 +105,23 @@ func (h *LLMHandler) Query(model, text string) (string, bool, error) {
 	h.messages = append(h.messages, message)
 
 	// Check if there's a tool call for hangup
-	shouldHangup := false
-	var responseText string
-
-	// Extract text response
-	responseText = message.Content
-
+	var hangupTool *HangupTool
 	// Check for tool calls
 	if len(message.ToolCalls) > 0 {
 		for _, toolCall := range message.ToolCalls {
 			if toolCall.Function.Name == "hangup" {
-				shouldHangup = true
+				hangupTool = &HangupTool{}
 				// Parse the arguments
-				var hangupTool HangupTool
-				if err := json.Unmarshal([]byte(toolCall.Function.Arguments), &hangupTool); err != nil {
+				if err := json.Unmarshal([]byte(toolCall.Function.Arguments), hangupTool); err != nil {
 					h.logger.WithError(err).Error("Failed to parse hangup arguments")
 				} else {
-					h.logger.WithField("reason", hangupTool.Reason).Info("Hangup reason")
-				}
-
-				// If we have a hangup reason, append it to the response
-				if hangupTool.Reason != "" {
-					if responseText != "" {
-						responseText += " " + hangupTool.Reason
-					} else {
-						responseText = hangupTool.Reason
-					}
+					h.logger.WithField("reason", hangupTool.Reason).Info("llm: Hangup reason")
 				}
 			}
 		}
 	}
 
-	return responseText, shouldHangup, nil
+	return message.Content, hangupTool, nil
 }
 
 // Reset clears the conversation history but keeps the system prompt

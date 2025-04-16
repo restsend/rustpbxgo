@@ -22,7 +22,7 @@ func main() {
 	openaiModel := flag.String("openai-model", "", "OpenAI model to use")
 	openaiEndpoint := flag.String("openai-endpoint", "", "OpenAI endpoint to use")
 	systemPrompt := flag.String("system-prompt", "You are a helpful assistant. Provide concise responses. Use 'hangup' tool when the conversation is complete.", "System prompt for LLM")
-	breakOnVad := flag.Bool("break-on-vad", true, "Break on VAD")
+	breakOnVad := flag.Bool("break-on-vad", false, "Break on VAD")
 	flag.Parse()
 
 	if *openaiKey == "" {
@@ -83,18 +83,13 @@ func main() {
 			logger.Errorf("Error querying LLM: %v", err)
 			return
 		}
-		logger.Infof("LLM shouldHangup:%v response: %s ", shouldHangup, response)
+		logger.Infof("LLM shouldHangup: %v response: %s ", shouldHangup, response)
 		// Speak the response
 		if response != "" {
-			if err := client.TTS(response, "", "", shouldHangup); err != nil {
+			if err := client.TTS(response, "", "", shouldHangup != nil); err != nil {
 				logger.Errorf("Error sending TTS: %v", err)
 			}
 		}
-		// if shouldHangup {
-		// 	logger.Info("LLM requested hangup, ending call")
-		// 	client.Hangup()
-		// 	sigChan <- syscall.SIGTERM
-		// }
 	}
 	client.OnHangup = func(event rustpbxgo.HangupEvent) {
 		logger.Infof("Hangup: %s", event.Reason)
