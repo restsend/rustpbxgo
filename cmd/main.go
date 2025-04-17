@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
@@ -24,20 +25,36 @@ func main() {
 	openaiEndpoint := flag.String("openai-endpoint", "", "OpenAI endpoint to use")
 	systemPrompt := flag.String("system-prompt", "You are a helpful assistant. Provide concise responses. Use 'hangup' tool when the conversation is complete.", "System prompt for LLM")
 	breakOnVad := flag.Bool("break-on-vad", false, "Break on VAD")
+	speaker := flag.String("speaker", "", "Speaker to use")
 	flag.Parse()
 
 	if *openaiKey == "" {
 		*openaiKey = os.Getenv("OPENAI_API_KEY")
-		if *openaiKey == "" {
-			fmt.Println("OpenAI API key is required. Set it with --openai-key flag or OPENAI_API_KEY environment variable.")
-			os.Exit(1)
-		}
+
 	}
 	if *openaiEndpoint == "" {
 		*openaiEndpoint = os.Getenv("OPENAI_ENDPOINT")
 	}
 	if *openaiModel == "" {
 		*openaiModel = os.Getenv("OPENAI_MODEL")
+	}
+
+	if *openaiEndpoint == "" {
+		u, err := url.Parse(*endpoint)
+		if err != nil {
+			fmt.Printf("Failed to parse endpoint: %v", err)
+			os.Exit(1)
+		}
+		*openaiEndpoint = u.Host
+		if u.Scheme == "wss" {
+			*openaiEndpoint = "https://" + u.Host
+		} else {
+			*openaiEndpoint = "http://" + u.Host
+		}
+		*openaiEndpoint += "/llm/v1"
+		if *openaiModel == "" {
+			*openaiModel = "qwen-14b"
+		}
 	}
 
 	// Create logger
@@ -149,6 +166,7 @@ func main() {
 		},
 		TTS: &rustpbxgo.TTSOption{
 			Provider: "tencent",
+			Speaker:  *speaker,
 		},
 		Offer: localSdp,
 	})
