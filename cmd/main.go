@@ -2,15 +2,20 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/joho/godotenv"
+	"github.com/pion/webrtc/v3"
 	"github.com/restsend/rustpbxgo"
 	"github.com/sirupsen/logrus"
 )
@@ -27,7 +32,13 @@ func main() {
 	breakOnVad := flag.Bool("break-on-vad", false, "Break on VAD")
 	speaker := flag.String("speaker", "", "Speaker to use")
 	flag.Parse()
-
+	u, err := url.Parse(*endpoint)
+	if err != nil {
+		fmt.Printf("Failed to parse endpoint: %v", err)
+		os.Exit(1)
+	}
+	endpointHost := u.Host
+	endpointSecurity := strings.ToLower(u.Scheme) == "wss"
 	if *openaiKey == "" {
 		*openaiKey = os.Getenv("OPENAI_API_KEY")
 
@@ -40,13 +51,8 @@ func main() {
 	}
 
 	if *openaiEndpoint == "" {
-		u, err := url.Parse(*endpoint)
-		if err != nil {
-			fmt.Printf("Failed to parse endpoint: %v", err)
-			os.Exit(1)
-		}
-		*openaiEndpoint = u.Host
-		if u.Scheme == "wss" {
+		*openaiEndpoint = endpointHost
+		if endpointSecurity {
 			*openaiEndpoint = "https://" + u.Host
 		} else {
 			*openaiEndpoint = "http://" + u.Host
@@ -148,8 +154,23 @@ func main() {
 		logger.Fatalf("Failed to connect to server: %v", err)
 	}
 	defer client.Shutdown()
-
-	localSdp, err := mediaHandler.Setup(*codec)
+	var iceServers []webrtc.ICEServer
+	//http.Get("")
+	iceUrl := "https://"
+	if !endpointSecurity {
+		iceUrl = "http://"
+	}
+	iceUrl = fmt.Sprintf("%s%s/iceservers", iceUrl, endpointHost)
+	resp, err := http.Get(iceUrl)
+	if err == nil {
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		json.Unmarshal(body, &iceServers)
+		logger.WithFields(logrus.Fields{
+			"iceservers": len(iceServers),
+		}).Info("get iceservers")
+	}
+	localSdp, err := mediaHandler.Setup(*codec, iceServers)
 	if err != nil {
 		logger.Fatalf("Failed to get local SDP: %v", err)
 	}

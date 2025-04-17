@@ -56,7 +56,7 @@ func NewMediaHandler(ctx context.Context, logger *logrus.Logger) (*MediaHandler,
 	}, nil
 }
 
-func (mh *MediaHandler) Setup(codec string) (string, error) {
+func (mh *MediaHandler) Setup(codec string, iceServers []webrtc.ICEServer) (string, error) {
 	mediaEngine := webrtc.MediaEngine{}
 	var codecParams webrtc.RTPCodecParameters
 	if codec == "g722" {
@@ -81,11 +81,7 @@ func (mh *MediaHandler) Setup(codec string) (string, error) {
 
 	api := webrtc.NewAPI(webrtc.WithMediaEngine(&mediaEngine))
 	peerConnection, err := api.NewPeerConnection(webrtc.Configuration{
-		ICEServers: []webrtc.ICEServer{
-			{
-				URLs: []string{"stun:stun.l.google.com:19302"},
-			},
-		},
+		ICEServers: iceServers,
 	})
 	if err != nil {
 		return "", fmt.Errorf("failed to create peer connection: %w", err)
