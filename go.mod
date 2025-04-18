@@ -1,11 +1,14 @@
 module github.com/restsend/rustpbxgo
 
-go 1.24.1
+go 1.23.0
 
 require (
 	github.com/gen2brain/malgo v0.11.23
 	github.com/gorilla/websocket v1.5.3
+	github.com/joho/godotenv v1.5.1
 	github.com/pion/webrtc/v3 v3.3.5
+	github.com/sashabaranov/go-openai v1.38.1
+	github.com/shenjinti/go711 v0.0.0-20241003044859-031301957637
 	github.com/shenjinti/go722 v0.0.0-20241018003611-642cc8091058
 	github.com/sirupsen/logrus v1.9.3
 )
@@ -13,7 +16,6 @@ require (
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/pion/datachannel v1.5.10 // indirect
 	github.com/pion/dtls/v2 v2.2.12 // indirect
 	github.com/pion/ice/v2 v2.3.37 // indirect
@@ -31,8 +33,6 @@ require (
 	github.com/pion/transport/v3 v3.0.7 // indirect
 	github.com/pion/turn/v2 v2.1.6 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/sashabaranov/go-openai v1.38.1 // indirect
-	github.com/shenjinti/go711 v0.0.0-20241003044859-031301957637 // indirect
 	github.com/stretchr/testify v1.10.0 // indirect
 	github.com/wlynxg/anet v0.0.5 // indirect
 	golang.org/x/crypto v0.37.0 // indirect
