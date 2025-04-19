@@ -366,12 +366,12 @@ func WithID(id string) ClientOption {
 	}
 }
 
-func (c *Client) Connect() error {
+func (c *Client) Connect(callType string) error {
 	if c.cancel == nil {
 		c.ctx, c.cancel = context.WithCancel(context.Background())
 	}
 	url := c.endpoint
-	url += "/call/webrtc"
+	url += "/call/" + callType
 	if c.id != "" {
 		url = fmt.Sprintf("%s?id=%s", url, c.id)
 	}
