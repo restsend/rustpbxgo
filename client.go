@@ -274,7 +274,6 @@ type UnmuteCommand struct {
 
 type RecorderOption struct {
 	Samplerate int `json:"samplerate,omitempty"`
-	Ptime      int `json:"ptime,omitempty"`
 }
 
 type VADOption struct {

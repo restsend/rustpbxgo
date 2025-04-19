@@ -171,7 +171,6 @@ func main() {
 	if record {
 		recorder = &rustpbxgo.RecorderOption{
 			Samplerate: 16000,
-			Ptime:      20,
 		}
 	}
 	options := rustpbxgo.StreamOption{
