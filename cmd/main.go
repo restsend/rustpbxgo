@@ -31,6 +31,8 @@ func main() {
 	var speaker string = ""
 	var callWithSip bool = false
 	var record bool = false
+	var ttsProvider string = "tencent"
+	var asrProvider string = "tencent"
 	flag.StringVar(&endpoint, "endpoint", endpoint, "Endpoint to connect to")
 	flag.StringVar(&codec, "codec", codec, "Codec to use")
 	flag.StringVar(&openaiKey, "openai-key", openaiKey, "OpenAI API key")
@@ -40,7 +42,9 @@ func main() {
 	flag.BoolVar(&breakOnVad, "break-on-vad", breakOnVad, "Break on VAD")
 	flag.BoolVar(&callWithSip, "sip", callWithSip, "Call with SIP")
 	flag.BoolVar(&record, "record", record, "Record the call")
-
+	flag.StringVar(&ttsProvider, "tts-provider", ttsProvider, "TTS provider to use")
+	flag.StringVar(&asrProvider, "asr-provider", asrProvider, "ASR provider to use")
+	flag.StringVar(&speaker, "speaker", speaker, "Speaker to use")
 	flag.Parse()
 	u, err := url.Parse(endpoint)
 	if err != nil {
@@ -95,7 +99,7 @@ func main() {
 	)
 	client.OnClose = func(reason string) {
 		logger.Infof("Connection closed: %s", reason)
-		sigChan <- true
+		os.Exit(0)
 	}
 	client.OnEvent = func(event string, payload string) {
 		logger.Debugf("Received event: %s %s", event, payload)
@@ -180,10 +184,10 @@ func main() {
 			Type: "silero",
 		},
 		ASR: &rustpbxgo.ASROption{
-			Provider: "tencent",
+			Provider: asrProvider,
 		},
 		TTS: &rustpbxgo.TTSOption{
-			Provider: "tencent",
+			Provider: ttsProvider,
 			Speaker:  speaker,
 		},
 	}
