@@ -193,6 +193,12 @@ func main() {
 		if options.Caller == "" || options.Callee == "" {
 			logger.Fatalf("SIP_CALLER and SIP_CALLEE must be set")
 		}
+		sipOption := rustpbxgo.SipOption{
+			Username: os.Getenv("SIP_USERNAME"),
+			Password: os.Getenv("SIP_PASSWORD"),
+			Domain:   os.Getenv("SIP_DOMAIN"),
+		}
+		options.Sip = &sipOption
 	} else {
 		var iceServers []webrtc.ICEServer
 		//http.Get("")

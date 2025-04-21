@@ -311,6 +311,11 @@ type TTSOption struct {
 	Subtitle   bool    `json:"subtitle,omitempty"`
 	Emotion    string  `json:"emotion,omitempty"`
 }
+type SipOption struct {
+	Username string `json:"username,omitempty"`
+	Password string `json:"password,omitempty"`
+	Domain   string `json:"domain,omitempty"`
+}
 
 // StreamOption represents options for stream commands
 type StreamOption struct {
@@ -324,6 +329,7 @@ type StreamOption struct {
 	TTS              *TTSOption      `json:"tts,omitempty"`
 	HandshakeTimeout string          `json:"handshakeTimeout,omitempty"`
 	EnableIPv6       bool            `json:"enableIpv6,omitempty"`
+	Sip              *SipOption      `json:"sip,omitempty"`
 }
 
 // ReferOption represents options for refer command
