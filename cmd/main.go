@@ -21,7 +21,7 @@ import (
 func main() {
 	godotenv.Load()
 	// Parse command line flags
-	var endpoint string = "ws://localhost:8080"
+	var endpoint string = "wss://rustpbx.com"
 	var codec string = "g722"
 	var openaiKey string = ""
 	var openaiModel string = ""
@@ -34,16 +34,16 @@ func main() {
 	var ttsProvider string = "tencent"
 	var asrProvider string = "tencent"
 	flag.StringVar(&endpoint, "endpoint", endpoint, "Endpoint to connect to")
-	flag.StringVar(&codec, "codec", codec, "Codec to use")
+	flag.StringVar(&codec, "codec", codec, "Codec to use: g722, pcmu")
 	flag.StringVar(&openaiKey, "openai-key", openaiKey, "OpenAI API key")
-	flag.StringVar(&openaiModel, "openai-model", openaiModel, "OpenAI model to use")
+	flag.StringVar(&openaiModel, "model", openaiModel, "OpenAI model to use: qwen-14b, qwen-turbo")
 	flag.StringVar(&openaiEndpoint, "openai-endpoint", openaiEndpoint, "OpenAI endpoint to use")
 	flag.StringVar(&systemPrompt, "system-prompt", systemPrompt, "System prompt to use")
 	flag.BoolVar(&breakOnVad, "break-on-vad", breakOnVad, "Break on VAD")
 	flag.BoolVar(&callWithSip, "sip", callWithSip, "Call with SIP")
 	flag.BoolVar(&record, "record", record, "Record the call")
-	flag.StringVar(&ttsProvider, "tts-provider", ttsProvider, "TTS provider to use")
-	flag.StringVar(&asrProvider, "asr-provider", asrProvider, "ASR provider to use")
+	flag.StringVar(&ttsProvider, "tts", ttsProvider, "TTS provider to use: tencent, voiceapi")
+	flag.StringVar(&asrProvider, "asr", asrProvider, "ASR provider to use: tencent, voiceapi")
 	flag.StringVar(&speaker, "speaker", speaker, "Speaker to use")
 	flag.Parse()
 	u, err := url.Parse(endpoint)
@@ -113,23 +113,21 @@ func main() {
 			return
 		}
 		startTime := time.Now()
-		response, shouldHangup, err := llmHandler.Query(openaiModel, event.Text)
+
+		err := llmHandler.QueryStream(openaiModel, event.Text, func(segment string, playID string, autoHangup bool) error {
+			logger.WithFields(logrus.Fields{
+				"segment":    segment,
+				"playID":     playID,
+				"autoHangup": autoHangup,
+			}).Debug("Sending TTS segment")
+			return client.TTS(segment, "", playID, autoHangup)
+		})
+
 		if err != nil {
-			logger.Errorf("Error querying LLM: %v", err)
+			logger.Errorf("Error querying LLM stream: %v", err)
 			return
 		}
-		logger.Infof("LLM response: %s duration: %s", response, time.Since(startTime))
-		if shouldHangup != nil {
-			logger.Infof("LLM shouldHangup: %v", shouldHangup)
-		}
-		// Speak the response
-		if response != "" {
-			if err := client.TTS(response, "", "", shouldHangup != nil); err != nil {
-				logger.Errorf("Error sending TTS: %v", err)
-			}
-		} else if shouldHangup != nil {
-			client.Hangup(shouldHangup.Reason)
-		}
+		logger.Infof("LLM streaming response completed in: %s", time.Since(startTime))
 	}
 	client.OnHangup = func(event rustpbxgo.HangupEvent) {
 		logger.Infof("Hangup: %s", event.Reason)
