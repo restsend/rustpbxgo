@@ -185,6 +185,7 @@ type ErrorEvent struct {
 	Timestamp uint64 `json:"timestamp"`
 	Sender    string `json:"sender"`
 	Error     string `json:"error"`
+	Code      uint32 `json:"code,omitempty"`
 }
 
 // Command represents WebSocket commands to be sent to the server
@@ -208,6 +209,7 @@ type AcceptCommand struct {
 type RejectCommand struct {
 	Command string `json:"command"`
 	Reason  string `json:"reason"`
+	Code    uint32 `json:"code,omitempty"`
 }
 
 // CandidateCommand sends ICE candidates
