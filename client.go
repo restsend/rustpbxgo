@@ -194,14 +194,14 @@ type Command struct {
 
 // InviteCommand initiates a call
 type InviteCommand struct {
-	Command string       `json:"command"`
-	Options StreamOption `json:"options"`
+	Command string     `json:"command"`
+	Option  CallOption `json:"option"`
 }
 
 // AcceptCommand accepts an incoming call
 type AcceptCommand struct {
-	Command string       `json:"command"`
-	Options StreamOption `json:"options"`
+	Command string     `json:"command"`
+	Option  CallOption `json:"option"`
 }
 
 // RejectCommand rejects an incoming call
@@ -317,8 +317,8 @@ type SipOption struct {
 	Domain   string `json:"domain,omitempty"`
 }
 
-// StreamOption represents options for stream commands
-type StreamOption struct {
+// CallOption represents options for invite/answer commands
+type CallOption struct {
 	Denoise          bool            `json:"denoise,omitempty"`
 	Offer            string          `json:"offer,omitempty"`
 	Callee           string          `json:"callee,omitempty"`
@@ -626,7 +626,7 @@ func (c *Client) Shutdown() error {
 }
 
 // It returns a channel that will receive the answer event
-func (c *Client) Invite(ctx context.Context, options StreamOption) (*AnswerEvent, error) {
+func (c *Client) Invite(ctx context.Context, option CallOption) (*AnswerEvent, error) {
 	onAnswer := c.onAnswer
 	ch := make(chan AnswerEvent, 1)
 	c.onAnswer = func(event AnswerEvent) {
@@ -637,7 +637,7 @@ func (c *Client) Invite(ctx context.Context, options StreamOption) (*AnswerEvent
 	}()
 	cmd := InviteCommand{
 		Command: "invite",
-		Options: options,
+		Option:  option,
 	}
 	err := c.sendCommand(cmd)
 	if err != nil {
@@ -652,10 +652,10 @@ func (c *Client) Invite(ctx context.Context, options StreamOption) (*AnswerEvent
 }
 
 // Accept sends an accept command to accept an incoming call
-func (c *Client) Accept(options StreamOption) error {
+func (c *Client) Accept(option CallOption) error {
 	cmd := AcceptCommand{
 		Command: "accept",
-		Options: options,
+		Option:  option,
 	}
 	return c.sendCommand(cmd)
 }

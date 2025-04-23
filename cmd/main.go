@@ -175,7 +175,7 @@ func main() {
 			Samplerate: 16000,
 		}
 	}
-	options := rustpbxgo.StreamOption{
+	options := rustpbxgo.CallOption{
 		Recorder: recorder,
 		Denoise:  true,
 		VAD: &rustpbxgo.VADOption{
