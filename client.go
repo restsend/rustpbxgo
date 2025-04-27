@@ -19,7 +19,6 @@ type OnRinging func(event RingingEvent)
 type OnAnswerMachineDetection func(event AnswerMachineDetectionEvent)
 type OnSpeaking func(event SpeakingEvent)
 type OnSilence func(event SilenceEvent)
-type OnNoisy func(event NoisyEvent)
 type OnDTMF func(event DTMFEvent)
 type OnTrackStart func(event TrackStartEvent)
 type OnTrackEnd func(event TrackEndEvent)
@@ -31,6 +30,8 @@ type OnLLMDelta func(event LLMDeltaEvent)
 type OnMetrics func(event MetricsEvent)
 type OnError func(event ErrorEvent)
 type OnClose func(reason string)
+type OnGibberish func(event GibberishEvent)
+type OnAddHistory func(event AddHistoryEvent)
 type Client struct {
 	ctx                      context.Context
 	cancel                   context.CancelFunc
@@ -48,7 +49,6 @@ type Client struct {
 	OnAnswerMachineDetection OnAnswerMachineDetection
 	OnSpeaking               OnSpeaking
 	OnSilence                OnSilence
-	OnNoisy                  OnNoisy
 	OnDTMF                   OnDTMF
 	OnTrackStart             OnTrackStart
 	OnTrackEnd               OnTrackEnd
@@ -59,6 +59,8 @@ type Client struct {
 	OnLLMDelta               OnLLMDelta
 	OnMetrics                OnMetrics
 	OnError                  OnError
+	OnAddHistory             OnAddHistory
+	OnGibberish              OnGibberish
 }
 
 type event struct {
@@ -114,13 +116,6 @@ type SilenceEvent struct {
 	Timestamp uint64 `json:"timestamp"`
 	StartTime uint64 `json:"startTime"`
 	Duration  uint64 `json:"duration"`
-}
-
-type NoisyEvent struct {
-	TrackID   string `json:"trackId"`
-	Timestamp uint64 `json:"timestamp"`
-	StartTime uint64 `json:"startTime"`
-	Type      string `json:"type"`
 }
 
 type DTMFEvent struct {
@@ -181,11 +176,22 @@ type MetricsEvent struct {
 }
 
 type ErrorEvent struct {
+	TrackID   string  `json:"trackId"`
+	Timestamp uint64  `json:"timestamp"`
+	Sender    string  `json:"sender"`
+	Error     string  `json:"error"`
+	Code      *uint32 `json:"code,omitempty"`
+}
+type GibberishEvent struct {
 	TrackID   string `json:"trackId"`
 	Timestamp uint64 `json:"timestamp"`
+	Action    string `json:"action" comment:"pause|continue|stop|ask"`
+}
+type AddHistoryEvent struct {
 	Sender    string `json:"sender"`
-	Error     string `json:"error"`
-	Code      uint32 `json:"code,omitempty"`
+	Timestamp uint64 `json:"timestamp"`
+	Speaker   string `json:"speaker"`
+	Text      string `json:"text"`
 }
 
 // Command represents WebSocket commands to be sent to the server
@@ -272,6 +278,11 @@ type MuteCommand struct {
 type UnmuteCommand struct {
 	Command string  `json:"command"`
 	TrackID *string `json:"trackId,omitempty"`
+}
+type HistoryCommand struct {
+	Command string `json:"command"`
+	Speaker string `json:"speaker"`
+	Text    string `json:"text"`
 }
 
 type RecorderOption struct {
@@ -519,15 +530,6 @@ func (c *Client) processEvent(message []byte) {
 		if c.OnSilence != nil {
 			c.OnSilence(event)
 		}
-	case "noisy":
-		var event NoisyEvent
-		if err := json.Unmarshal(message, &event); err != nil {
-			c.logger.Errorf("Error unmarshalling noisy event: %v", err)
-			return
-		}
-		if c.OnNoisy != nil {
-			c.OnNoisy(event)
-		}
 	case "dtmf":
 		var event DTMFEvent
 		if err := json.Unmarshal(message, &event); err != nil {
@@ -617,6 +619,24 @@ func (c *Client) processEvent(message []byte) {
 		}
 		if c.OnError != nil {
 			c.OnError(event)
+		}
+	case "addHistory":
+		var event AddHistoryEvent
+		if err := json.Unmarshal(message, &event); err != nil {
+			c.logger.Errorf("Error unmarshalling addHistory event: %v", err)
+			return
+		}
+		if c.OnAddHistory != nil {
+			c.OnAddHistory(event)
+		}
+	case "gibberish":
+		var event GibberishEvent
+		if err := json.Unmarshal(message, &event); err != nil {
+			c.logger.Errorf("Error unmarshalling gibberish event: %v", err)
+			return
+		}
+		if c.OnGibberish != nil {
+			c.OnGibberish(event)
 		}
 	default:
 		c.logger.Debugf("Unhandled event type: %s", ev.Event)
@@ -759,6 +779,15 @@ func (c *Client) Unmute(trackID *string) error {
 	cmd := UnmuteCommand{
 		Command: "unmute",
 		TrackID: trackID,
+	}
+	return c.sendCommand(cmd)
+}
+
+func (c *Client) History(speaker string, text string) error {
+	cmd := HistoryCommand{
+		Command: "history",
+		Speaker: speaker,
+		Text:    text,
 	}
 	return c.sendCommand(cmd)
 }
