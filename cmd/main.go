@@ -35,7 +35,13 @@ func main() {
 	var asrProvider string = "tencent"
 	var caller string = ""
 	var callee string = ""
-
+	var asrEndpoint string = ""
+	var asrSecretKey string = ""
+	var ttsEndpoint string = ""
+	var ttsSecretKey string = ""
+	var vadModel string = "silero"
+	var vadEndpoint string = ""
+	var vadSecretKey string = ""
 	flag.StringVar(&endpoint, "endpoint", endpoint, "Endpoint to connect to")
 	flag.StringVar(&codec, "codec", codec, "Codec to use: g722, pcmu")
 	flag.StringVar(&openaiKey, "openai-key", openaiKey, "OpenAI API key")
@@ -50,6 +56,13 @@ func main() {
 	flag.StringVar(&speaker, "speaker", speaker, "Speaker to use")
 	flag.StringVar(&caller, "caller", caller, "Caller to use")
 	flag.StringVar(&callee, "callee", callee, "Callee to use")
+	flag.StringVar(&asrEndpoint, "asr-endpoint", asrEndpoint, "ASR endpoint to use")
+	flag.StringVar(&asrSecretKey, "asr-secret-key", asrSecretKey, "ASR secret key to use")
+	flag.StringVar(&ttsEndpoint, "tts-endpoint", ttsEndpoint, "TTS endpoint to use")
+	flag.StringVar(&ttsSecretKey, "tts-secret-key", ttsSecretKey, "TTS secret key to use")
+	flag.StringVar(&vadModel, "vad-model", vadModel, "VAD model to use")
+	flag.StringVar(&vadEndpoint, "vad-endpoint", vadEndpoint, "VAD endpoint to use")
+	flag.StringVar(&vadSecretKey, "vad-secret-key", vadSecretKey, "VAD secret key to use")
 
 	flag.Parse()
 	u, err := url.Parse(endpoint)
@@ -185,14 +198,20 @@ func main() {
 		Recorder: recorder,
 		Denoise:  true,
 		VAD: &rustpbxgo.VADOption{
-			Type: "silero",
+			Type:      vadModel,
+			Endpoint:  vadEndpoint,
+			SecretKey: vadSecretKey,
 		},
 		ASR: &rustpbxgo.ASROption{
-			Provider: asrProvider,
+			Provider:  asrProvider,
+			Endpoint:  asrEndpoint,
+			SecretKey: asrSecretKey,
 		},
 		TTS: &rustpbxgo.TTSOption{
-			Provider: ttsProvider,
-			Speaker:  speaker,
+			Provider:  ttsProvider,
+			Speaker:   speaker,
+			Endpoint:  ttsEndpoint,
+			SecretKey: ttsSecretKey,
 		},
 	}
 	if callWithSip {
