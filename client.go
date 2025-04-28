@@ -32,6 +32,8 @@ type OnError func(event ErrorEvent)
 type OnClose func(reason string)
 type OnGibberish func(event GibberishEvent)
 type OnAddHistory func(event AddHistoryEvent)
+type OnOther func(event OtherEvent)
+
 type Client struct {
 	ctx                      context.Context
 	cancel                   context.CancelFunc
@@ -61,6 +63,7 @@ type Client struct {
 	OnError                  OnError
 	OnAddHistory             OnAddHistory
 	OnGibberish              OnGibberish
+	OnOther                  OnOther
 }
 
 type event struct {
@@ -194,6 +197,13 @@ type AddHistoryEvent struct {
 	Text      string `json:"text"`
 }
 
+type OtherEvent struct {
+	TrackID   string            `json:"trackId"`
+	Timestamp uint64            `json:"timestamp"`
+	Sender    string            `json:"sender"`
+	Extra     map[string]string `json:"extra,omitempty"`
+}
+
 // Command represents WebSocket commands to be sent to the server
 type Command struct {
 	Command string `json:"command"`
@@ -226,11 +236,13 @@ type CandidateCommand struct {
 
 // TtsCommand sends text to be synthesized
 type TtsCommand struct {
-	Command    string `json:"command"`
-	Text       string `json:"text"`
-	Speaker    string `json:"speaker,omitempty"`
-	PlayID     string `json:"playId,omitempty"`
-	AutoHangup bool   `json:"autoHangup,omitempty"`
+	Command     string `json:"command"`
+	Text        string `json:"text"`
+	Speaker     string `json:"speaker,omitempty"`
+	PlayID      string `json:"playId,omitempty"`
+	AutoHangup  bool   `json:"autoHangup,omitempty"`
+	Streaming   bool   `json:"streaming,omitempty"`
+	EndOfStream bool   `json:"endOfStream,omitempty"`
 }
 
 // PlayCommand plays audio from a URL
@@ -297,52 +309,62 @@ type VADOption struct {
 	Ratio                 float32 `json:"ratio,omitempty" comment:"vad ratio, 0.5|0.7"`
 	VoiceThreshold        float32 `json:"voiceThreshold,omitempty" comment:"vad voice threshold, 0.5"`
 	MaxBufferDurationSecs uint64  `json:"maxBufferDurationSecs,omitempty"`
+	Endpoint              string  `json:"endpoint,omitempty"`
+	SecretKey             string  `json:"secretKey,omitempty"`
+	SecretID              string  `json:"secretId,omitempty"`
 }
 
 type ASROption struct {
-	Provider   string `json:"provider,omitempty" comment:"asr provider, tencent|aliyun"`
-	Model      string `json:"model,omitempty"`
-	Language   string `json:"language,omitempty"`
-	AppID      string `json:"appId,omitempty"`
-	SecretID   string `json:"secretId,omitempty"`
-	SecretKey  string `json:"secretKey,omitempty"`
-	ModelType  string `json:"modelType,omitempty"`
-	BufferSize int    `json:"bufferSize,omitempty"`
-	SampleRate uint32 `json:"sampleRate,omitempty"`
+	Provider   string            `json:"provider,omitempty" comment:"asr provider, tencent|aliyun"`
+	Model      string            `json:"model,omitempty"`
+	Language   string            `json:"language,omitempty"`
+	AppID      string            `json:"appId,omitempty"`
+	SecretID   string            `json:"secretId,omitempty"`
+	SecretKey  string            `json:"secretKey,omitempty"`
+	ModelType  string            `json:"modelType,omitempty"`
+	BufferSize int               `json:"bufferSize,omitempty"`
+	SampleRate uint32            `json:"sampleRate,omitempty"`
+	Endpoint   string            `json:"endpoint,omitempty"`
+	Extra      map[string]string `json:"extra,omitempty"`
 }
 
 type TTSOption struct {
-	Samplerate int32   `json:"samplerate,omitempty" comment:"tts samplerate, 16000|48000"`
-	Provider   string  `json:"provider,omitempty" comment:"tts provider, tencent|aliyun"`
-	Speed      float32 `json:"speed,omitempty"`
-	AppID      string  `json:"appId,omitempty"`
-	SecretID   string  `json:"secretId,omitempty"`
-	SecretKey  string  `json:"secretKey,omitempty"`
-	Volume     int32   `json:"volume,omitempty"`
-	Speaker    string  `json:"speaker,omitempty"`
-	Codec      string  `json:"codec,omitempty"`
-	Subtitle   bool    `json:"subtitle,omitempty"`
-	Emotion    string  `json:"emotion,omitempty"`
+	Samplerate int32             `json:"samplerate,omitempty" comment:"tts samplerate, 16000|48000"`
+	Provider   string            `json:"provider,omitempty" comment:"tts provider, tencent|aliyun"`
+	Speed      float32           `json:"speed,omitempty"`
+	AppID      string            `json:"appId,omitempty"`
+	SecretID   string            `json:"secretId,omitempty"`
+	SecretKey  string            `json:"secretKey,omitempty"`
+	Volume     int32             `json:"volume,omitempty"`
+	Speaker    string            `json:"speaker,omitempty"`
+	Codec      string            `json:"codec,omitempty"`
+	Subtitle   bool              `json:"subtitle,omitempty"`
+	Emotion    string            `json:"emotion,omitempty"`
+	Endpoint   string            `json:"endpoint,omitempty"`
+	Extra      map[string]string `json:"extra,omitempty"`
 }
+
 type SipOption struct {
-	Username string `json:"username,omitempty"`
-	Password string `json:"password,omitempty"`
-	Domain   string `json:"domain,omitempty"`
+	Username string            `json:"username,omitempty"`
+	Password string            `json:"password,omitempty"`
+	Domain   string            `json:"domain,omitempty"`
+	Headers  map[string]string `json:"headers,omitempty"`
 }
 
 // CallOption represents options for invite/answer commands
 type CallOption struct {
-	Denoise          bool            `json:"denoise,omitempty"`
-	Offer            string          `json:"offer,omitempty"`
-	Callee           string          `json:"callee,omitempty"`
-	Caller           string          `json:"caller,omitempty"`
-	Recorder         *RecorderOption `json:"recorder,omitempty"`
-	VAD              *VADOption      `json:"vad,omitempty"`
-	ASR              *ASROption      `json:"asr,omitempty"`
-	TTS              *TTSOption      `json:"tts,omitempty"`
-	HandshakeTimeout string          `json:"handshakeTimeout,omitempty"`
-	EnableIPv6       bool            `json:"enableIpv6,omitempty"`
-	Sip              *SipOption      `json:"sip,omitempty"`
+	Denoise          bool              `json:"denoise,omitempty"`
+	Offer            string            `json:"offer,omitempty"`
+	Callee           string            `json:"callee,omitempty"`
+	Caller           string            `json:"caller,omitempty"`
+	Recorder         *RecorderOption   `json:"recorder,omitempty"`
+	VAD              *VADOption        `json:"vad,omitempty"`
+	ASR              *ASROption        `json:"asr,omitempty"`
+	TTS              *TTSOption        `json:"tts,omitempty"`
+	HandshakeTimeout string            `json:"handshakeTimeout,omitempty"`
+	EnableIPv6       bool              `json:"enableIpv6,omitempty"`
+	Sip              *SipOption        `json:"sip,omitempty"`
+	Extra            map[string]string `json:"extra,omitempty"`
 }
 
 // ReferOption represents options for refer command
@@ -638,6 +660,15 @@ func (c *Client) processEvent(message []byte) {
 		if c.OnGibberish != nil {
 			c.OnGibberish(event)
 		}
+	case "other":
+		var event OtherEvent
+		if err := json.Unmarshal(message, &event); err != nil {
+			c.logger.Errorf("Error unmarshalling other event: %v", err)
+			return
+		}
+		if c.OnOther != nil {
+			c.OnOther(event)
+		}
 	default:
 		c.logger.Debugf("Unhandled event type: %s", ev.Event)
 	}
@@ -703,11 +734,27 @@ func (c *Client) SendCandidates(candidates []string) error {
 // TTS sends a text-to-speech command
 func (c *Client) TTS(text string, speaker string, playID string, autoHangup bool) error {
 	cmd := TtsCommand{
-		Command:    "tts",
-		Text:       text,
-		Speaker:    speaker,
-		PlayID:     playID,
-		AutoHangup: autoHangup,
+		Command:     "tts",
+		Text:        text,
+		Speaker:     speaker,
+		PlayID:      playID,
+		AutoHangup:  autoHangup,
+		Streaming:   false,
+		EndOfStream: true,
+	}
+	return c.sendCommand(cmd)
+}
+
+// TTS sends a text-to-speech command
+func (c *Client) StreamTTS(text string, speaker string, playID string, autoHangup, endOfStream bool) error {
+	cmd := TtsCommand{
+		Command:     "tts",
+		Text:        text,
+		Speaker:     speaker,
+		PlayID:      playID,
+		AutoHangup:  autoHangup,
+		Streaming:   true,
+		EndOfStream: endOfStream,
 	}
 	return c.sendCommand(cmd)
 }
