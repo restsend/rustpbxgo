@@ -33,6 +33,9 @@ func main() {
 	var record bool = false
 	var ttsProvider string = "tencent"
 	var asrProvider string = "tencent"
+	var caller string = ""
+	var callee string = ""
+
 	flag.StringVar(&endpoint, "endpoint", endpoint, "Endpoint to connect to")
 	flag.StringVar(&codec, "codec", codec, "Codec to use: g722, pcmu")
 	flag.StringVar(&openaiKey, "openai-key", openaiKey, "OpenAI API key")
@@ -45,6 +48,9 @@ func main() {
 	flag.StringVar(&ttsProvider, "tts", ttsProvider, "TTS provider to use: tencent, voiceapi")
 	flag.StringVar(&asrProvider, "asr", asrProvider, "ASR provider to use: tencent, voiceapi")
 	flag.StringVar(&speaker, "speaker", speaker, "Speaker to use")
+	flag.StringVar(&caller, "caller", caller, "Caller to use")
+	flag.StringVar(&callee, "callee", callee, "Callee to use")
+
 	flag.Parse()
 	u, err := url.Parse(endpoint)
 	if err != nil {
@@ -190,10 +196,17 @@ func main() {
 		},
 	}
 	if callWithSip {
-		options.Caller = os.Getenv("SIP_CALLER")
-		options.Callee = os.Getenv("SIP_CALLEE")
+		if caller == "" {
+			caller = os.Getenv("SIP_CALLER")
+		}
+		if callee == "" {
+			callee = os.Getenv("SIP_CALLEE")
+		}
+
+		options.Caller = caller
+		options.Callee = callee
 		if options.Caller == "" || options.Callee == "" {
-			logger.Fatalf("SIP_CALLER and SIP_CALLEE must be set")
+			logger.Fatalf("caller and callee must be set")
 		}
 		sipOption := rustpbxgo.SipOption{
 			Username: os.Getenv("SIP_USERNAME"),
