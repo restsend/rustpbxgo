@@ -138,7 +138,7 @@ func main() {
 				"segment":    segment,
 				"playID":     playID,
 				"autoHangup": autoHangup,
-			}).Debug("Sending TTS segment")
+			}).Info("Sending TTS segment")
 			return client.TTS(segment, "", playID, autoHangup)
 		})
 
@@ -275,7 +275,6 @@ func main() {
 
 	// Initial greeting
 	client.TTS("Hello, how can I help you?", "", "", false)
-
 	<-sigChan
 	fmt.Println("Shutting down...")
 }

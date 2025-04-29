@@ -170,10 +170,8 @@ func (h *LLMHandler) QueryStream(model, text string, ttsCallback func(segment st
 	}
 
 	// Send any remaining text in the buffer
-	if buffer != "" {
-		if err := ttsCallback(buffer, playID, shouldHangup); err != nil {
-			h.logger.WithError(err).Error("Failed to send final TTS segment")
-		}
+	if err := ttsCallback(buffer, playID, shouldHangup); err != nil {
+		h.logger.WithError(err).Error("Failed to send final TTS segment")
 	}
 
 	// Add assistant's complete response to conversation history
