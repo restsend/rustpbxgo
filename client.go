@@ -681,12 +681,27 @@ func (c *Client) Shutdown() error {
 // It returns a channel that will receive the answer event
 func (c *Client) Invite(ctx context.Context, option CallOption) (*AnswerEvent, error) {
 	onAnswer := c.onAnswer
-	ch := make(chan AnswerEvent, 1)
+	ch := make(chan any, 1)
 	c.onAnswer = func(event AnswerEvent) {
+		ch <- event
+	}
+	onError := c.OnError
+	c.OnError = func(event ErrorEvent) {
+		ch <- event
+	}
+	onReject := c.OnReject
+	c.OnReject = func(event RejectEvent) {
+		ch <- event
+	}
+	onHangup := c.OnHangup
+	c.OnHangup = func(event HangupEvent) {
 		ch <- event
 	}
 	defer func() {
 		c.onAnswer = onAnswer
+		c.OnError = onError
+		c.OnReject = onReject
+		c.OnHangup = onHangup
 	}()
 	cmd := InviteCommand{
 		Command: "invite",
@@ -700,7 +715,19 @@ func (c *Client) Invite(ctx context.Context, option CallOption) (*AnswerEvent, e
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case event := <-ch:
-		return &event, nil
+		if event, ok := event.(AnswerEvent); ok {
+			return &event, nil
+		}
+		if event, ok := event.(ErrorEvent); ok {
+			return nil, errors.New(event.Error)
+		}
+		if event, ok := event.(RejectEvent); ok {
+			return nil, errors.New(event.Reason)
+		}
+		if event, ok := event.(HangupEvent); ok {
+			return nil, errors.New(event.Reason)
+		}
+		return nil, errors.New("invalid event type")
 	}
 }
 

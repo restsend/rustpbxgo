@@ -54,7 +54,7 @@ func NewLLMHandler(ctx context.Context, apiKey, endpoint, systemPrompt string, l
 }
 
 // QueryStream processes the LLM response as a stream and sends segments to TTS as they arrive
-func (h *LLMHandler) QueryStream(model, text string, ttsCallback func(segment string, playID string, autoHangup bool) error) error {
+func (h *LLMHandler) QueryStream(model, text string, ttsCallback func(segment string, playID string, autoHangup bool) error) (string, error) {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
@@ -104,7 +104,7 @@ func (h *LLMHandler) QueryStream(model, text string, ttsCallback func(segment st
 	// Stream for handling responses
 	stream, err := h.client.CreateChatCompletionStream(h.ctx, request)
 	if err != nil {
-		return fmt.Errorf("error creating chat completion stream: %w", err)
+		return "", fmt.Errorf("error creating chat completion stream: %w", err)
 	}
 	defer stream.Close()
 
@@ -124,7 +124,7 @@ func (h *LLMHandler) QueryStream(model, text string, ttsCallback func(segment st
 				// Stream closed normally
 				break
 			}
-			return fmt.Errorf("error receiving from stream: %w", err)
+			return "", fmt.Errorf("error receiving from stream: %w", err)
 		}
 
 		// Check for function calls (hangup)
@@ -185,7 +185,7 @@ func (h *LLMHandler) QueryStream(model, text string, ttsCallback func(segment st
 		"hangup":         shouldHangup,
 	}).Info("LLM stream completed")
 
-	return nil
+	return fullResponse, nil
 }
 
 // Query the LLM with text and get a response (non-streaming version, kept for compatibility)

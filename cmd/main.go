@@ -102,14 +102,14 @@ func main() {
 	logger.SetLevel(logrus.InfoLevel)
 
 	// Create context with cancellation
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx, _ := context.WithCancel(context.Background())
+	//defer cancel()
 
 	// Create LLM handler
 	llmHandler := NewLLMHandler(ctx, openaiKey, openaiEndpoint, systemPrompt, logger)
 
 	// Handle signals for graceful shutdown
-	sigChan := make(chan bool, 1)
+	sigChan := make(chan bool)
 
 	// Create client
 	client := rustpbxgo.NewClient(endpoint,
@@ -118,14 +118,21 @@ func main() {
 	)
 	client.OnClose = func(reason string) {
 		logger.Infof("Connection closed: %s", reason)
-		os.Exit(0)
+		sigChan <- true
 	}
 	client.OnEvent = func(event string, payload string) {
 		logger.Debugf("Received event: %s %s", event, payload)
 	}
+	client.OnError = func(event rustpbxgo.ErrorEvent) {
+		logger.Errorf("Error: %v", event)
+	}
 
 	// Handle ASR Final events
 	client.OnAsrFinal = func(event rustpbxgo.AsrFinalEvent) {
+		if event.Text != "" {
+			client.History("user", event.Text)
+		}
+
 		client.Interrupt()
 		logger.Infof("ASR Final: %s", event.Text)
 		if event.Text == "" {
@@ -133,7 +140,7 @@ func main() {
 		}
 		startTime := time.Now()
 
-		err := llmHandler.QueryStream(openaiModel, event.Text, func(segment string, playID string, autoHangup bool) error {
+		response, err := llmHandler.QueryStream(openaiModel, event.Text, func(segment string, playID string, autoHangup bool) error {
 			logger.WithFields(logrus.Fields{
 				"segment":    segment,
 				"playID":     playID,
@@ -147,6 +154,7 @@ func main() {
 			return
 		}
 		logger.Infof("LLM streaming response completed in: %s", time.Since(startTime))
+		client.History("bot", response)
 	}
 	client.OnHangup = func(event rustpbxgo.HangupEvent) {
 		logger.Infof("Hangup: %s", event.Reason)
