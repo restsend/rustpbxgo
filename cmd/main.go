@@ -126,6 +126,9 @@ func main() {
 	client.OnError = func(event rustpbxgo.ErrorEvent) {
 		logger.Errorf("Error: %v", event)
 	}
+	client.OnDTMF = func(event rustpbxgo.DTMFEvent) {
+		logger.Infof("DTMF: %s", event.Digit)
+	}
 
 	// Handle ASR Final events
 	client.OnAsrFinal = func(event rustpbxgo.AsrFinalEvent) {
