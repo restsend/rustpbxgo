@@ -30,7 +30,7 @@ type OnLLMDelta func(event LLMDeltaEvent)
 type OnMetrics func(event MetricsEvent)
 type OnError func(event ErrorEvent)
 type OnClose func(reason string)
-type OnGibberish func(event GibberishEvent)
+type OnEou func(event EouEvent)
 type OnAddHistory func(event AddHistoryEvent)
 type OnOther func(event OtherEvent)
 
@@ -62,7 +62,7 @@ type Client struct {
 	OnMetrics                OnMetrics
 	OnError                  OnError
 	OnAddHistory             OnAddHistory
-	OnGibberish              OnGibberish
+	OnEou                    OnEou
 	OnOther                  OnOther
 }
 
@@ -185,10 +185,10 @@ type ErrorEvent struct {
 	Error     string  `json:"error"`
 	Code      *uint32 `json:"code,omitempty"`
 }
-type GibberishEvent struct {
+type EouEvent struct {
 	TrackID   string `json:"trackId"`
 	Timestamp uint64 `json:"timestamp"`
-	Action    string `json:"action" comment:"pause|continue|stop|ask"`
+	Complete  bool   `json:"complete"`
 }
 type AddHistoryEvent struct {
 	Sender    string `json:"sender"`
@@ -347,7 +347,7 @@ type TTSOption struct {
 type SipOption struct {
 	Username string            `json:"username,omitempty"`
 	Password string            `json:"password,omitempty"`
-	Domain   string            `json:"domain,omitempty"`
+	Realm    string            `json:"realm,omitempty"`
 	Headers  map[string]string `json:"headers,omitempty"`
 }
 
@@ -651,14 +651,14 @@ func (c *Client) processEvent(message []byte) {
 		if c.OnAddHistory != nil {
 			c.OnAddHistory(event)
 		}
-	case "gibberish":
-		var event GibberishEvent
+	case "eou":
+		var event EouEvent
 		if err := json.Unmarshal(message, &event); err != nil {
-			c.logger.Errorf("Error unmarshalling gibberish event: %v", err)
+			c.logger.Errorf("Error unmarshalling eou event: %v", err)
 			return
 		}
-		if c.OnGibberish != nil {
-			c.OnGibberish(event)
+		if c.OnEou != nil {
+			c.OnEou(event)
 		}
 	case "other":
 		var event OtherEvent

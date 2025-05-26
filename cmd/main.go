@@ -241,7 +241,7 @@ func main() {
 		sipOption := rustpbxgo.SipOption{
 			Username: os.Getenv("SIP_USERNAME"),
 			Password: os.Getenv("SIP_PASSWORD"),
-			Domain:   os.Getenv("SIP_DOMAIN"),
+			Realm:    os.Getenv("SIP_DOMAIN"),
 		}
 		options.Sip = &sipOption
 	} else {
