@@ -18,6 +18,95 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+type CreateClientOption struct {
+	Endpoint    string
+	Logger      *logrus.Logger
+	LLMHandler  *LLMHandler
+	SigChan     chan bool
+	OpenaiModel string
+	BreakOnVad  bool
+	CallOption  rustpbxgo.CallOption
+}
+
+func createClient(ctx context.Context, option CreateClientOption, id string) *rustpbxgo.Client {
+	client := rustpbxgo.NewClient(option.Endpoint,
+		rustpbxgo.WithLogger(option.Logger),
+		rustpbxgo.WithContext(ctx),
+		rustpbxgo.WithID(id),
+	)
+
+	client.OnClose = func(reason string) {
+		option.Logger.Infof("Connection closed: %s", reason)
+		option.SigChan <- true
+	}
+	client.OnEvent = func(event string, payload string) {
+		option.Logger.Debugf("Received event: %s %s", event, payload)
+	}
+	client.OnError = func(event rustpbxgo.ErrorEvent) {
+		option.Logger.Errorf("Error: %v", event)
+	}
+	client.OnDTMF = func(event rustpbxgo.DTMFEvent) {
+		option.Logger.Infof("DTMF: %s", event.Digit)
+	}
+
+	// Handle ASR Final events
+	client.OnAsrFinal = func(event rustpbxgo.AsrFinalEvent) {
+		if event.Text != "" {
+			client.History("user", event.Text)
+		}
+
+		client.Interrupt()
+		option.Logger.Infof("ASR Final: %s", event.Text)
+		if event.Text == "" {
+			return
+		}
+		startTime := time.Now()
+
+		response, err := option.LLMHandler.QueryStream(option.OpenaiModel, event.Text, func(segment string, playID string, autoHangup bool) error {
+			if len(segment) == 0 {
+				return nil
+			}
+			option.Logger.WithFields(logrus.Fields{
+				"segment":    segment,
+				"playID":     playID,
+				"autoHangup": autoHangup,
+			}).Info("Sending TTS segment")
+			return client.TTS(segment, "", playID, autoHangup)
+		})
+
+		if err != nil {
+			option.Logger.Errorf("Error querying LLM stream: %v", err)
+			return
+		}
+		option.Logger.Infof("LLM streaming response completed in: %s", time.Since(startTime))
+		client.History("bot", response)
+	}
+	client.OnHangup = func(event rustpbxgo.HangupEvent) {
+		option.Logger.Infof("Hangup: %s", event.Reason)
+		option.SigChan <- true
+	}
+	// Handle ASR Delta events (partial results)
+	client.OnAsrDelta = func(event rustpbxgo.AsrDeltaEvent) {
+		option.Logger.Debugf("ASR Delta: %s", event.Text)
+		if option.BreakOnVad {
+			return
+		}
+		if err := client.Interrupt(); err != nil {
+			option.Logger.Warnf("Failed to interrupt TTS: %v", err)
+		}
+	}
+	client.OnSpeaking = func(event rustpbxgo.SpeakingEvent) {
+		if !option.BreakOnVad {
+			return
+		}
+		option.Logger.Infof("Interrupting TTS")
+		if err := client.Interrupt(); err != nil {
+			option.Logger.Warnf("Failed to interrupt TTS: %v", err)
+		}
+	}
+	return client
+}
+
 func main() {
 	godotenv.Load()
 	// Parse command line flags
@@ -42,6 +131,9 @@ func main() {
 	var vadModel string = "silero"
 	var vadEndpoint string = ""
 	var vadSecretKey string = ""
+	var webhookAddr string = ""
+	var webhookPrefix string = "/webhook"
+
 	flag.StringVar(&endpoint, "endpoint", endpoint, "Endpoint to connect to")
 	flag.StringVar(&codec, "codec", codec, "Codec to use: g722, pcmu")
 	flag.StringVar(&openaiKey, "openai-key", openaiKey, "OpenAI API key")
@@ -63,6 +155,8 @@ func main() {
 	flag.StringVar(&vadModel, "vad-model", vadModel, "VAD model to use")
 	flag.StringVar(&vadEndpoint, "vad-endpoint", vadEndpoint, "VAD endpoint to use")
 	flag.StringVar(&vadSecretKey, "vad-secret-key", vadSecretKey, "VAD secret key to use")
+	flag.StringVar(&webhookAddr, "webhook-addr", webhookAddr, "Webhook address to use")
+	flag.StringVar(&webhookPrefix, "webhook-prefix", webhookPrefix, "Webhook prefix to use")
 
 	flag.Parse()
 	u, err := url.Parse(endpoint)
@@ -95,117 +189,34 @@ func main() {
 			openaiModel = "qwen-14b"
 		}
 	}
-
 	// Create logger
 	logger := logrus.New()
 	logger.SetOutput(os.Stdout)
 	logger.SetLevel(logrus.InfoLevel)
 
 	// Create context with cancellation
-	ctx, _ := context.WithCancel(context.Background())
-	//defer cancel()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	// Create LLM handler
 	llmHandler := NewLLMHandler(ctx, openaiKey, openaiEndpoint, systemPrompt, logger)
-
 	// Handle signals for graceful shutdown
 	sigChan := make(chan bool)
-
-	// Create client
-	client := rustpbxgo.NewClient(endpoint,
-		rustpbxgo.WithLogger(logger),
-		rustpbxgo.WithContext(ctx),
-	)
-	client.OnClose = func(reason string) {
-		logger.Infof("Connection closed: %s", reason)
-		sigChan <- true
+	option := CreateClientOption{
+		Endpoint:    endpoint,
+		Logger:      logger,
+		LLMHandler:  llmHandler,
+		SigChan:     sigChan,
+		OpenaiModel: openaiModel,
+		BreakOnVad:  breakOnVad,
 	}
-	client.OnEvent = func(event string, payload string) {
-		logger.Debugf("Received event: %s %s", event, payload)
-	}
-	client.OnError = func(event rustpbxgo.ErrorEvent) {
-		logger.Errorf("Error: %v", event)
-	}
-	client.OnDTMF = func(event rustpbxgo.DTMFEvent) {
-		logger.Infof("DTMF: %s", event.Digit)
-	}
-
-	// Handle ASR Final events
-	client.OnAsrFinal = func(event rustpbxgo.AsrFinalEvent) {
-		if event.Text != "" {
-			client.History("user", event.Text)
-		}
-
-		client.Interrupt()
-		logger.Infof("ASR Final: %s", event.Text)
-		if event.Text == "" {
-			return
-		}
-		startTime := time.Now()
-
-		response, err := llmHandler.QueryStream(openaiModel, event.Text, func(segment string, playID string, autoHangup bool) error {
-			logger.WithFields(logrus.Fields{
-				"segment":    segment,
-				"playID":     playID,
-				"autoHangup": autoHangup,
-			}).Info("Sending TTS segment")
-			return client.TTS(segment, "", playID, autoHangup)
-		})
-
-		if err != nil {
-			logger.Errorf("Error querying LLM stream: %v", err)
-			return
-		}
-		logger.Infof("LLM streaming response completed in: %s", time.Since(startTime))
-		client.History("bot", response)
-	}
-	client.OnHangup = func(event rustpbxgo.HangupEvent) {
-		logger.Infof("Hangup: %s", event.Reason)
-		sigChan <- true
-	}
-	// Handle ASR Delta events (partial results)
-	client.OnAsrDelta = func(event rustpbxgo.AsrDeltaEvent) {
-		logger.Debugf("ASR Delta: %s", event.Text)
-		if breakOnVad {
-			return
-		}
-		if err := client.Interrupt(); err != nil {
-			logger.Warnf("Failed to interrupt TTS: %v", err)
-		}
-	}
-	client.OnSpeaking = func(event rustpbxgo.SpeakingEvent) {
-		if !breakOnVad {
-			return
-		}
-		logger.Infof("Interrupting TTS")
-		if err := client.Interrupt(); err != nil {
-			logger.Warnf("Failed to interrupt TTS: %v", err)
-		}
-	}
-	callType := "webrtc"
-	if callWithSip {
-		callType = "sip"
-	}
-	// Connect to server
-	err = client.Connect(callType)
-	if err != nil {
-		logger.Fatalf("Failed to connect to server: %v", err)
-	}
-	defer client.Shutdown()
-
-	// Create media handler
-	mediaHandler, err := NewMediaHandler(ctx, logger)
-	if err != nil {
-		logger.Fatalf("Failed to create media handler: %v", err)
-	}
-	defer mediaHandler.Stop()
 	var recorder *rustpbxgo.RecorderOption
 	if record {
 		recorder = &rustpbxgo.RecorderOption{
 			Samplerate: 16000,
 		}
 	}
-	options := rustpbxgo.CallOption{
+	callOption := rustpbxgo.CallOption{
 		Recorder: recorder,
 		Denoise:  true,
 		VAD: &rustpbxgo.VADOption{
@@ -225,6 +236,7 @@ func main() {
 			SecretKey: ttsSecretKey,
 		},
 	}
+
 	if callWithSip {
 		if caller == "" {
 			caller = os.Getenv("SIP_CALLER")
@@ -233,9 +245,9 @@ func main() {
 			callee = os.Getenv("SIP_CALLEE")
 		}
 
-		options.Caller = caller
-		options.Callee = callee
-		if options.Caller == "" || options.Callee == "" {
+		callOption.Caller = caller
+		callOption.Callee = callee
+		if callOption.Caller == "" || callOption.Callee == "" {
 			logger.Fatalf("caller and callee must be set")
 		}
 		sipOption := rustpbxgo.SipOption{
@@ -243,7 +255,20 @@ func main() {
 			Password: os.Getenv("SIP_PASSWORD"),
 			Realm:    os.Getenv("SIP_DOMAIN"),
 		}
-		options.Sip = &sipOption
+		callOption.Sip = &sipOption
+	}
+	option.CallOption = callOption
+
+	// Create media handler
+	mediaHandler, err := NewMediaHandler(ctx, logger)
+	if err != nil {
+		logger.Fatalf("Failed to create media handler: %v", err)
+	}
+	defer mediaHandler.Stop()
+
+	callType := "webrtc"
+	if callWithSip {
+		callType = "sip"
 	} else {
 		var iceServers []webrtc.ICEServer
 		//http.Get("")
@@ -267,25 +292,36 @@ func main() {
 			logger.Fatalf("Failed to get local SDP: %v", err)
 		}
 		logger.Infof("Offer SDP: %v", localSdp)
-		options.Offer = localSdp
+		callOption.Offer = localSdp
 	}
-	// Start the call
-	answer, err := client.Invite(ctx, options)
-	if err != nil {
-		logger.Fatalf("Failed to invite: %v", err)
-	}
-	logger.Infof("Answer SDP: %v", answer.Sdp)
 
-	if !callWithSip {
-		// local media
-		err = mediaHandler.SetupAnswer(answer.Sdp)
+	if webhookAddr != "" {
+		serveWebhook(ctx, option, webhookAddr, webhookPrefix)
+	} else {
+		client := createClient(ctx, option, "")
+		// Connect to server
+		err = client.Connect(callType)
 		if err != nil {
-			logger.Fatalf("Failed to setup answer: %v", err)
+			logger.Fatalf("Failed to connect to server: %v", err)
 		}
-	}
+		defer client.Shutdown()
+		// Start the call
+		answer, err := client.Invite(ctx, callOption)
+		if err != nil {
+			logger.Fatalf("Failed to invite: %v", err)
+		}
+		logger.Infof("Answer SDP: %v", answer.Sdp)
 
-	// Initial greeting
-	client.TTS("Hello, how can I help you?", "", "", false)
+		if !callWithSip {
+			// local media
+			err = mediaHandler.SetupAnswer(answer.Sdp)
+			if err != nil {
+				logger.Fatalf("Failed to setup answer: %v", err)
+			}
+		}
+		// Initial greeting
+		client.TTS("Hello, how can I help you?", "", "", false)
+	}
 	<-sigChan
 	fmt.Println("Shutting down...")
 }

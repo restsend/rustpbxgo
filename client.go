@@ -37,6 +37,7 @@ type OnOther func(event OtherEvent)
 type Client struct {
 	ctx                      context.Context
 	cancel                   context.CancelFunc
+	eventChan                chan []byte
 	endpoint                 string
 	conn                     *websocket.Conn
 	logger                   *logrus.Logger
@@ -421,7 +422,7 @@ func (c *Client) Connect(callType string) error {
 		return err
 	}
 
-	eventChan := make(chan []byte)
+	c.eventChan = make(chan []byte)
 	go func() {
 		for {
 			mt, message, err := c.conn.ReadMessage()
@@ -437,7 +438,7 @@ func (c *Client) Connect(callType string) error {
 				continue
 			}
 			select {
-			case eventChan <- message:
+			case c.eventChan <- message:
 			case <-c.ctx.Done():
 				return
 			}
@@ -445,14 +446,14 @@ func (c *Client) Connect(callType string) error {
 	}()
 
 	go func() {
-		defer close(eventChan)
+		defer close(c.eventChan)
 		defer c.conn.Close()
 
 		for {
 			select {
 			case <-c.ctx.Done():
 				return
-			case message, ok := <-eventChan:
+			case message, ok := <-c.eventChan:
 				if !ok {
 					return
 				}
