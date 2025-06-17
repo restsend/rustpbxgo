@@ -186,7 +186,7 @@ func main() {
 		}
 		openaiEndpoint += "/llm/v1"
 		if openaiModel == "" {
-			openaiModel = "qwen-14b"
+			openaiModel = "qwen3-14b"
 		}
 	}
 	// Create logger
