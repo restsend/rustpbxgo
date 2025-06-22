@@ -19,13 +19,16 @@ import (
 )
 
 type CreateClientOption struct {
-	Endpoint    string
-	Logger      *logrus.Logger
-	LLMHandler  *LLMHandler
-	SigChan     chan bool
-	OpenaiModel string
-	BreakOnVad  bool
-	CallOption  rustpbxgo.CallOption
+	Endpoint       string
+	Logger         *logrus.Logger
+	SigChan        chan bool
+	LLMHandler     *LLMHandler
+	OpenaiKey      string
+	OpenaiEndpoint string
+	OpenaiModel    string
+	SystemPrompt   string
+	BreakOnVad     bool
+	CallOption     rustpbxgo.CallOption
 }
 
 func createClient(ctx context.Context, option CreateClientOption, id string) *rustpbxgo.Client {
@@ -34,6 +37,7 @@ func createClient(ctx context.Context, option CreateClientOption, id string) *ru
 		rustpbxgo.WithContext(ctx),
 		rustpbxgo.WithID(id),
 	)
+	option.LLMHandler = NewLLMHandler(ctx, option.OpenaiKey, option.OpenaiEndpoint, option.SystemPrompt, option.Logger)
 
 	client.OnClose = func(reason string) {
 		option.Logger.Infof("Connection closed: %s", reason)
@@ -48,7 +52,6 @@ func createClient(ctx context.Context, option CreateClientOption, id string) *ru
 	client.OnDTMF = func(event rustpbxgo.DTMFEvent) {
 		option.Logger.Infof("DTMF: %s", event.Digit)
 	}
-
 	// Handle ASR Final events
 	client.OnAsrFinal = func(event rustpbxgo.AsrFinalEvent) {
 		if event.Text != "" {
@@ -61,7 +64,6 @@ func createClient(ctx context.Context, option CreateClientOption, id string) *ru
 			return
 		}
 		startTime := time.Now()
-
 		response, err := option.LLMHandler.QueryStream(option.OpenaiModel, event.Text, func(segment string, playID string, autoHangup bool) error {
 			if len(segment) == 0 {
 				return nil
@@ -117,7 +119,7 @@ func main() {
 	var openaiEndpoint string = ""
 	var systemPrompt string = "You are a helpful assistant. Provide concise responses. Use 'hangup' tool when the conversation is complete."
 	var breakOnVad bool = false
-	var speaker string = ""
+	var speaker string = "601003"
 	var callWithSip bool = false
 	var record bool = false
 	var ttsProvider string = "tencent"
@@ -198,17 +200,18 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Create LLM handler
-	llmHandler := NewLLMHandler(ctx, openaiKey, openaiEndpoint, systemPrompt, logger)
 	// Handle signals for graceful shutdown
 	sigChan := make(chan bool)
 	option := CreateClientOption{
-		Endpoint:    endpoint,
-		Logger:      logger,
-		LLMHandler:  llmHandler,
-		SigChan:     sigChan,
-		OpenaiModel: openaiModel,
-		BreakOnVad:  breakOnVad,
+		Endpoint:       endpoint,
+		Logger:         logger,
+		LLMHandler:     nil,
+		OpenaiKey:      openaiKey,
+		OpenaiEndpoint: openaiEndpoint,
+		OpenaiModel:    openaiModel,
+		SystemPrompt:   systemPrompt,
+		SigChan:        sigChan,
+		BreakOnVad:     breakOnVad,
 	}
 	var recorder *rustpbxgo.RecorderOption
 	if record {
