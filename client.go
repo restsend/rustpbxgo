@@ -366,6 +366,15 @@ type CallOption struct {
 	EnableIPv6       bool              `json:"enableIpv6,omitempty"`
 	Sip              *SipOption        `json:"sip,omitempty"`
 	Extra            map[string]string `json:"extra,omitempty"`
+	Eou              *EouOption        `json:"eou,omitempty"`
+}
+
+type EouOption struct {
+	Type      string `json:"type,omitempty"`
+	Endpoint  string `json:"endpoint,omitempty"`
+	SecretKey string `json:"secretKey,omitempty"`
+	SecretID  string `json:"secretId,omitempty"`
+	Timeout   uint32 `json:"timeout,omitempty"`
 }
 
 // ReferOption represents options for refer command

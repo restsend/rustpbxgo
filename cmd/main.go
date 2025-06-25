@@ -139,7 +139,8 @@ func main() {
 	var vadSecretKey string = ""
 	var webhookAddr string = ""
 	var webhookPrefix string = "/webhook"
-
+	var eouType string = ""
+	var eouEndpoint string = ""
 	flag.StringVar(&endpoint, "endpoint", endpoint, "Endpoint to connect to")
 	flag.StringVar(&codec, "codec", codec, "Codec to use: g722, pcmu")
 	flag.StringVar(&openaiKey, "openai-key", openaiKey, "OpenAI API key")
@@ -163,6 +164,8 @@ func main() {
 	flag.StringVar(&vadSecretKey, "vad-secret-key", vadSecretKey, "VAD secret key to use")
 	flag.StringVar(&webhookAddr, "webhook-addr", webhookAddr, "Webhook address to use")
 	flag.StringVar(&webhookPrefix, "webhook-prefix", webhookPrefix, "Webhook prefix to use")
+	flag.StringVar(&eouType, "eou-type", eouType, "EOU type to use")
+	flag.StringVar(&eouEndpoint, "eou-endpoint", eouEndpoint, "EOU endpoint to use")
 
 	flag.Parse()
 	u, err := url.Parse(endpoint)
@@ -243,7 +246,12 @@ func main() {
 			SecretKey: ttsSecretKey,
 		},
 	}
-
+	if eouType != "" {
+		callOption.Eou = &rustpbxgo.EouOption{
+			Type:     eouType,
+			Endpoint: eouEndpoint,
+		}
+	}
 	if callWithSip {
 		if caller == "" {
 			caller = os.Getenv("SIP_CALLER")
