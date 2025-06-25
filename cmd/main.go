@@ -98,6 +98,7 @@ func createClient(ctx context.Context, option CreateClientOption, id string) *ru
 		}
 	}
 	client.OnSpeaking = func(event rustpbxgo.SpeakingEvent) {
+		option.Logger.Infof("OnSpeaking")
 		if !option.BreakOnVad {
 			return
 		}
@@ -105,6 +106,9 @@ func createClient(ctx context.Context, option CreateClientOption, id string) *ru
 		if err := client.Interrupt(); err != nil {
 			option.Logger.Warnf("Failed to interrupt TTS: %v", err)
 		}
+	}
+	client.OnEou = func(event rustpbxgo.EouEvent) {
+		option.Logger.Infof("OnEou: %v", event.Complete)
 	}
 	return client
 }
