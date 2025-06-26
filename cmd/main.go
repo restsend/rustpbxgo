@@ -274,6 +274,11 @@ func main() {
 	}
 	option.CallOption = callOption
 
+	if webhookAddr != "" {
+		serveWebhook(ctx, option, webhookAddr, webhookPrefix)
+		return
+	}
+
 	// Create media handler
 	mediaHandler, err := NewMediaHandler(ctx, logger)
 	if err != nil {
@@ -309,34 +314,30 @@ func main() {
 		logger.Infof("Offer SDP: %v", localSdp)
 		callOption.Offer = localSdp
 	}
-
-	if webhookAddr != "" {
-		serveWebhook(ctx, option, webhookAddr, webhookPrefix)
-	} else {
-		client := createClient(ctx, option, "")
-		// Connect to server
-		err = client.Connect(callType)
-		if err != nil {
-			logger.Fatalf("Failed to connect to server: %v", err)
-		}
-		defer client.Shutdown()
-		// Start the call
-		answer, err := client.Invite(ctx, callOption)
-		if err != nil {
-			logger.Fatalf("Failed to invite: %v", err)
-		}
-		logger.Infof("Answer SDP: %v", answer.Sdp)
-
-		if !callWithSip {
-			// local media
-			err = mediaHandler.SetupAnswer(answer.Sdp)
-			if err != nil {
-				logger.Fatalf("Failed to setup answer: %v", err)
-			}
-		}
-		// Initial greeting
-		client.TTS("Hello, how can I help you?", "", "", false)
+	client := createClient(ctx, option, "")
+	// Connect to server
+	err = client.Connect(callType)
+	if err != nil {
+		logger.Fatalf("Failed to connect to server: %v", err)
 	}
+	defer client.Shutdown()
+	// Start the call
+	answer, err := client.Invite(ctx, callOption)
+	if err != nil {
+		logger.Fatalf("Failed to invite: %v", err)
+	}
+	logger.Infof("Answer SDP: %v", answer.Sdp)
+
+	if !callWithSip {
+		// local media
+		err = mediaHandler.SetupAnswer(answer.Sdp)
+		if err != nil {
+			logger.Fatalf("Failed to setup answer: %v", err)
+		}
+	}
+	// Initial greeting
+	client.TTS("Hello, how can I help you?", "", "", false)
+
 	<-sigChan
 	fmt.Println("Shutting down...")
 }
