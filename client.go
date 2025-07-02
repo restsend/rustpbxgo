@@ -235,13 +235,14 @@ type CandidateCommand struct {
 
 // TtsCommand sends text to be synthesized
 type TtsCommand struct {
-	Command     string `json:"command"`
-	Text        string `json:"text"`
-	Speaker     string `json:"speaker,omitempty"`
-	PlayID      string `json:"playId,omitempty"`
-	AutoHangup  bool   `json:"autoHangup,omitempty"`
-	Streaming   bool   `json:"streaming,omitempty"`
-	EndOfStream bool   `json:"endOfStream,omitempty"`
+	Command     string     `json:"command"`
+	Text        string     `json:"text"`
+	Speaker     string     `json:"speaker,omitempty"`
+	PlayID      string     `json:"playId,omitempty"`
+	AutoHangup  bool       `json:"autoHangup,omitempty"`
+	Streaming   bool       `json:"streaming,omitempty"`
+	EndOfStream bool       `json:"endOfStream,omitempty"`
+	Option      *TTSOption `json:"option,omitempty"`
 }
 
 // PlayCommand plays audio from a URL
@@ -758,7 +759,7 @@ func (c *Client) SendCandidates(candidates []string) error {
 }
 
 // TTS sends a text-to-speech command
-func (c *Client) TTS(text string, speaker string, playID string, autoHangup bool) error {
+func (c *Client) TTS(text string, speaker string, playID string, autoHangup bool, option *TTSOption) error {
 	cmd := TtsCommand{
 		Command:     "tts",
 		Text:        text,
@@ -767,12 +768,13 @@ func (c *Client) TTS(text string, speaker string, playID string, autoHangup bool
 		AutoHangup:  autoHangup,
 		Streaming:   false,
 		EndOfStream: true,
+		Option:      option,
 	}
 	return c.sendCommand(cmd)
 }
 
 // TTS sends a text-to-speech command
-func (c *Client) StreamTTS(text string, speaker string, playID string, autoHangup, endOfStream bool) error {
+func (c *Client) StreamTTS(text string, speaker string, playID string, autoHangup, endOfStream bool, option *TTSOption) error {
 	cmd := TtsCommand{
 		Command:     "tts",
 		Text:        text,
@@ -781,6 +783,7 @@ func (c *Client) StreamTTS(text string, speaker string, playID string, autoHangu
 		AutoHangup:  autoHangup,
 		Streaming:   true,
 		EndOfStream: endOfStream,
+		Option:      option,
 	}
 	return c.sendCommand(cmd)
 }

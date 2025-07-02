@@ -76,7 +76,7 @@ func createClient(ctx context.Context, option CreateClientOption, id string) *ru
 				"playID":     playID,
 				"autoHangup": autoHangup,
 			}).Info("Sending TTS segment")
-			return client.TTS(segment, "", playID, autoHangup)
+			return client.TTS(segment, "", playID, autoHangup, nil)
 		})
 
 		if err != nil {
@@ -338,7 +338,7 @@ func main() {
 		}
 	}
 	// Initial greeting
-	client.TTS("Hello, how can I help you?", "", "", false)
+	client.TTS("Hello, how can I help you?", "", "", false, nil)
 
 	<-sigChan
 	fmt.Println("Shutting down...")

@@ -44,7 +44,7 @@ func serveWebhook(parent context.Context, option CreateClientOption, addr, prefi
 			defer client.Shutdown()
 			client.Accept(option.CallOption)
 			time.Sleep(300 * time.Millisecond)
-			client.TTS("Hello, how can I help you?", "", "", false)
+			client.TTS("Hello, how can I help you?", "", "", false, nil)
 			<-ctx.Done()
 		}()
 
