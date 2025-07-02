@@ -59,11 +59,14 @@ func createClient(ctx context.Context, option CreateClientOption, id string) *ru
 		}
 
 		client.Interrupt()
-		option.Logger.Infof("ASR Final: %s", event.Text)
+		startTime := time.UnixMilli(int64(*event.StartTime))
+		endTime := time.UnixMilli(int64(*event.EndTime))
+		option.Logger.Infof("ASR Final: %s startTime: %s endTime: %s", event.Text, startTime.String(), endTime.String())
 		if event.Text == "" {
 			return
 		}
-		startTime := time.Now()
+
+		startTime = time.Now()
 		response, err := option.LLMHandler.QueryStream(option.OpenaiModel, event.Text, func(segment string, playID string, autoHangup bool) error {
 			if len(segment) == 0 {
 				return nil
@@ -89,7 +92,9 @@ func createClient(ctx context.Context, option CreateClientOption, id string) *ru
 	}
 	// Handle ASR Delta events (partial results)
 	client.OnAsrDelta = func(event rustpbxgo.AsrDeltaEvent) {
-		option.Logger.Debugf("ASR Delta: %s", event.Text)
+		startTime := time.UnixMilli(int64(*event.StartTime))
+		endTime := time.UnixMilli(int64(*event.EndTime))
+		option.Logger.Debugf("ASR Delta: %s startTime: %s endTime: %s", event.Text, startTime.String(), endTime.String())
 		if option.BreakOnVad {
 			return
 		}
@@ -106,9 +111,6 @@ func createClient(ctx context.Context, option CreateClientOption, id string) *ru
 		if err := client.Interrupt(); err != nil {
 			option.Logger.Warnf("Failed to interrupt TTS: %v", err)
 		}
-	}
-	client.OnEou = func(event rustpbxgo.EouEvent) {
-		option.Logger.Infof("OnEou: %v", event.Complete)
 	}
 	return client
 }

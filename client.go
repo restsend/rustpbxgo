@@ -30,7 +30,6 @@ type OnLLMDelta func(event LLMDeltaEvent)
 type OnMetrics func(event MetricsEvent)
 type OnError func(event ErrorEvent)
 type OnClose func(reason string)
-type OnEou func(event EouEvent)
 type OnAddHistory func(event AddHistoryEvent)
 type OnOther func(event OtherEvent)
 
@@ -63,7 +62,6 @@ type Client struct {
 	OnMetrics                OnMetrics
 	OnError                  OnError
 	OnAddHistory             OnAddHistory
-	OnEou                    OnEou
 	OnOther                  OnOther
 }
 
@@ -148,8 +146,8 @@ type AsrFinalEvent struct {
 	TrackID   string  `json:"trackId"`
 	Timestamp uint64  `json:"timestamp"`
 	Index     uint32  `json:"index"`
-	StartTime *uint32 `json:"startTime,omitempty"`
-	EndTime   *uint32 `json:"endTime,omitempty"`
+	StartTime *uint64 `json:"startTime,omitempty"`
+	EndTime   *uint64 `json:"endTime,omitempty"`
 	Text      string  `json:"text"`
 }
 
@@ -157,8 +155,8 @@ type AsrDeltaEvent struct {
 	TrackID   string  `json:"trackId"`
 	Index     uint32  `json:"index"`
 	Timestamp uint64  `json:"timestamp"`
-	StartTime *uint32 `json:"startTime,omitempty"`
-	EndTime   *uint32 `json:"endTime,omitempty"`
+	StartTime *uint64 `json:"startTime,omitempty"`
+	EndTime   *uint64 `json:"endTime,omitempty"`
 	Text      string  `json:"text"`
 }
 
@@ -660,15 +658,6 @@ func (c *Client) processEvent(message []byte) {
 		}
 		if c.OnAddHistory != nil {
 			c.OnAddHistory(event)
-		}
-	case "eou":
-		var event EouEvent
-		if err := json.Unmarshal(message, &event); err != nil {
-			c.logger.Errorf("Error unmarshalling eou event: %v", err)
-			return
-		}
-		if c.OnEou != nil {
-			c.OnEou(event)
 		}
 	case "other":
 		var event OtherEvent
