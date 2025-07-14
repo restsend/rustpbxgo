@@ -136,6 +136,7 @@ func main() {
 	var asrAppID string = ""
 	var asrSecretID string = ""
 	var asrSecretKey string = ""
+	var asrModelType string = ""
 	var ttsEndpoint string = ""
 	var ttsAppID string = ""
 	var ttsSecretID string = ""
@@ -162,6 +163,7 @@ func main() {
 	flag.StringVar(&caller, "caller", caller, "Caller to use")
 	flag.StringVar(&callee, "callee", callee, "Callee to use")
 	flag.StringVar(&asrEndpoint, "asr-endpoint", asrEndpoint, "ASR endpoint to use")
+	flag.StringVar(&asrModelType, "asr-model-type", asrModelType, "ASR model type to use")
 	flag.StringVar(&asrAppID, "asr-app-id", asrAppID, "ASR app id to use")
 	flag.StringVar(&asrSecretID, "asr-secret-id", asrSecretID, "ASR secret id to use")
 	flag.StringVar(&asrSecretKey, "asr-secret-key", asrSecretKey, "ASR secret key to use")
@@ -250,6 +252,7 @@ func main() {
 			AppID:     asrAppID,
 			SecretID:  asrSecretID,
 			SecretKey: asrSecretKey,
+			ModelType: asrModelType,
 		},
 		TTS: &rustpbxgo.TTSOption{
 			Provider:  ttsProvider,
