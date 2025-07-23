@@ -228,12 +228,6 @@ type RejectCommand struct {
 	Code    uint32 `json:"code,omitempty"`
 }
 
-// CandidateCommand sends ICE candidates
-type CandidateCommand struct {
-	Command    string   `json:"command"`
-	Candidates []string `json:"candidates"`
-}
-
 // TtsCommand sends text to be synthesized
 type TtsCommand struct {
 	Command     string     `json:"command"`
@@ -313,6 +307,7 @@ type VADOption struct {
 	Endpoint              string  `json:"endpoint,omitempty"`
 	SecretKey             string  `json:"secretKey,omitempty"`
 	SecretID              string  `json:"secretId,omitempty"`
+	SilenceTimeout        uint    `json:"silenceTimeout,omitempty" comment:"vad silence timeout, 5000"`
 }
 
 type ASROption struct {
@@ -746,15 +741,6 @@ func (c *Client) Reject(reason string) error {
 	cmd := RejectCommand{
 		Command: "reject",
 		Reason:  reason,
-	}
-	return c.sendCommand(cmd)
-}
-
-// SendCandidates sends ICE candidates
-func (c *Client) SendCandidates(candidates []string) error {
-	cmd := CandidateCommand{
-		Command:    "candidate",
-		Candidates: candidates,
 	}
 	return c.sendCommand(cmd)
 }

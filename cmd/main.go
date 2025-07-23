@@ -148,6 +148,7 @@ func main() {
 	var webhookPrefix string = "/webhook"
 	var eouType string = ""
 	var eouEndpoint string = ""
+	var silenceTimeout uint = 5000
 	flag.StringVar(&endpoint, "endpoint", endpoint, "Endpoint to connect to")
 	flag.StringVar(&codec, "codec", codec, "Codec to use: g722, pcmu")
 	flag.StringVar(&openaiKey, "openai-key", openaiKey, "OpenAI API key")
@@ -178,7 +179,7 @@ func main() {
 	flag.StringVar(&webhookPrefix, "webhook-prefix", webhookPrefix, "Webhook prefix to use")
 	flag.StringVar(&eouType, "eou-type", eouType, "EOU type to use")
 	flag.StringVar(&eouEndpoint, "eou-endpoint", eouEndpoint, "EOU endpoint to use")
-
+	flag.UintVar(&silenceTimeout, "silence-timeout", silenceTimeout, "VAD silence timeout in milliseconds")
 	flag.Parse()
 	u, err := url.Parse(endpoint)
 	if err != nil {
@@ -242,9 +243,10 @@ func main() {
 		Recorder: recorder,
 		Denoise:  true,
 		VAD: &rustpbxgo.VADOption{
-			Type:      vadModel,
-			Endpoint:  vadEndpoint,
-			SecretKey: vadSecretKey,
+			Type:           vadModel,
+			Endpoint:       vadEndpoint,
+			SecretKey:      vadSecretKey,
+			SilenceTimeout: silenceTimeout,
 		},
 		ASR: &rustpbxgo.ASROption{
 			Provider:  asrProvider,
