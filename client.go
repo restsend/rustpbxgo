@@ -230,21 +230,23 @@ type RejectCommand struct {
 
 // TtsCommand sends text to be synthesized
 type TtsCommand struct {
-	Command     string     `json:"command"`
-	Text        string     `json:"text"`
-	Speaker     string     `json:"speaker,omitempty"`
-	PlayID      string     `json:"playId,omitempty"`
-	AutoHangup  bool       `json:"autoHangup,omitempty"`
-	Streaming   bool       `json:"streaming,omitempty"`
-	EndOfStream bool       `json:"endOfStream,omitempty"`
-	Option      *TTSOption `json:"option,omitempty"`
+	Command          string     `json:"command"`
+	Text             string     `json:"text"`
+	Speaker          string     `json:"speaker,omitempty"`
+	PlayID           string     `json:"playId,omitempty"`
+	AutoHangup       bool       `json:"autoHangup,omitempty"`
+	Streaming        bool       `json:"streaming,omitempty"`
+	EndOfStream      bool       `json:"endOfStream,omitempty"`
+	Option           *TTSOption `json:"option,omitempty"`
+	WaitInputTimeout *uint32    `json:"waitInputTimeout,omitempty" comment:"tts wait input timeout, 5000"`
 }
 
 // PlayCommand plays audio from a URL
 type PlayCommand struct {
-	Command    string `json:"command"`
-	URL        string `json:"url"`
-	AutoHangup bool   `json:"autoHangup,omitempty"`
+	Command          string  `json:"command"`
+	URL              string  `json:"url"`
+	AutoHangup       bool    `json:"autoHangup,omitempty"`
+	WaitInputTimeout *uint32 `json:"waitInputTimeout,omitempty" comment:"tts wait input timeout, 5000"`
 }
 
 // InterruptCommand interrupts current playback
@@ -325,19 +327,20 @@ type ASROption struct {
 }
 
 type TTSOption struct {
-	Samplerate int32             `json:"samplerate,omitempty" comment:"tts samplerate, 16000|48000"`
-	Provider   string            `json:"provider,omitempty" comment:"tts provider, tencent|aliyun"`
-	Speed      float32           `json:"speed,omitempty"`
-	AppID      string            `json:"appId,omitempty"`
-	SecretID   string            `json:"secretId,omitempty"`
-	SecretKey  string            `json:"secretKey,omitempty"`
-	Volume     int32             `json:"volume,omitempty"`
-	Speaker    string            `json:"speaker,omitempty"`
-	Codec      string            `json:"codec,omitempty"`
-	Subtitle   bool              `json:"subtitle,omitempty"`
-	Emotion    string            `json:"emotion,omitempty"`
-	Endpoint   string            `json:"endpoint,omitempty"`
-	Extra      map[string]string `json:"extra,omitempty"`
+	Samplerate       int32             `json:"samplerate,omitempty" comment:"tts samplerate, 16000|48000"`
+	Provider         string            `json:"provider,omitempty" comment:"tts provider, tencent|aliyun"`
+	Speed            float32           `json:"speed,omitempty"`
+	AppID            string            `json:"appId,omitempty"`
+	SecretID         string            `json:"secretId,omitempty"`
+	SecretKey        string            `json:"secretKey,omitempty"`
+	Volume           int32             `json:"volume,omitempty"`
+	Speaker          string            `json:"speaker,omitempty"`
+	Codec            string            `json:"codec,omitempty"`
+	Subtitle         bool              `json:"subtitle,omitempty"`
+	Emotion          string            `json:"emotion,omitempty"`
+	Endpoint         string            `json:"endpoint,omitempty"`
+	Extra            map[string]string `json:"extra,omitempty"`
+	WaitInputTimeout uint32            `json:"waitInputTimeout,omitempty" comment:"tts wait input timeout, 5000"`
 }
 
 type SipOption struct {
@@ -746,41 +749,44 @@ func (c *Client) Reject(reason string) error {
 }
 
 // TTS sends a text-to-speech command
-func (c *Client) TTS(text string, speaker string, playID string, autoHangup bool, option *TTSOption) error {
+func (c *Client) TTS(text string, speaker string, playID string, autoHangup bool, option *TTSOption, waitInputTimeout *uint32) error {
 	cmd := TtsCommand{
-		Command:     "tts",
-		Text:        text,
-		Speaker:     speaker,
-		PlayID:      playID,
-		AutoHangup:  autoHangup,
-		Streaming:   false,
-		EndOfStream: true,
-		Option:      option,
+		Command:          "tts",
+		Text:             text,
+		Speaker:          speaker,
+		PlayID:           playID,
+		AutoHangup:       autoHangup,
+		Streaming:        false,
+		EndOfStream:      true,
+		Option:           option,
+		WaitInputTimeout: waitInputTimeout,
 	}
 	return c.sendCommand(cmd)
 }
 
 // TTS sends a text-to-speech command
-func (c *Client) StreamTTS(text string, speaker string, playID string, autoHangup, endOfStream bool, option *TTSOption) error {
+func (c *Client) StreamTTS(text string, speaker string, playID string, autoHangup, endOfStream bool, option *TTSOption, waitInputTimeout *uint32) error {
 	cmd := TtsCommand{
-		Command:     "tts",
-		Text:        text,
-		Speaker:     speaker,
-		PlayID:      playID,
-		AutoHangup:  autoHangup,
-		Streaming:   true,
-		EndOfStream: endOfStream,
-		Option:      option,
+		Command:          "tts",
+		Text:             text,
+		Speaker:          speaker,
+		PlayID:           playID,
+		AutoHangup:       autoHangup,
+		Streaming:        true,
+		EndOfStream:      endOfStream,
+		Option:           option,
+		WaitInputTimeout: waitInputTimeout,
 	}
 	return c.sendCommand(cmd)
 }
 
 // Play sends a command to play audio from a URL
-func (c *Client) Play(url string, autoHangup bool) error {
+func (c *Client) Play(url string, autoHangup bool, waitInputTimeout *uint32) error {
 	cmd := PlayCommand{
-		Command:    "play",
-		URL:        url,
-		AutoHangup: autoHangup,
+		Command:          "play",
+		URL:              url,
+		AutoHangup:       autoHangup,
+		WaitInputTimeout: waitInputTimeout,
 	}
 	return c.sendCommand(cmd)
 }
