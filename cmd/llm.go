@@ -22,11 +22,38 @@ type LLMHandler struct {
 	messages    []openai.ChatCompletionMessage
 	hangupChan  chan struct{}
 	interruptCh chan struct{}
+	ReferTarget string
 }
 
 // ToolCall represents a function call from the LLM
 type HangupTool struct {
 	Reason string `json:"reason"`
+}
+
+// Define the function for hanging up
+var hangupDefinition = openai.FunctionDefinition{
+	Name:        "hangup",
+	Description: "End the conversation and hang up the call",
+	Parameters: json.RawMessage(`{
+		"type": "object",
+		"properties": {
+			"reason": {
+				"type": "string",
+				"description": "Reason for hanging up the call"
+			}
+		},
+		"required": []
+	}`),
+}
+var referDefinition = openai.FunctionDefinition{
+	Name:        "refer",
+	Description: "Refer the call to another target",
+	Parameters: json.RawMessage(`{
+		"type": "object",
+		"properties": {
+		},
+		"required": []
+	}`),
 }
 
 // NewLLMHandler creates a new LLM handler
@@ -54,7 +81,7 @@ func NewLLMHandler(ctx context.Context, apiKey, endpoint, systemPrompt string, l
 }
 
 // QueryStream processes the LLM response as a stream and sends segments to TTS as they arrive
-func (h *LLMHandler) QueryStream(model, text string, ttsCallback func(segment string, playID string, autoHangup bool) error) (string, error) {
+func (h *LLMHandler) QueryStream(model, text string, ttsCallback func(segment string, playID string, autoHangup, shouldRefer bool) error) (string, error) {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
@@ -63,22 +90,6 @@ func (h *LLMHandler) QueryStream(model, text string, ttsCallback func(segment st
 		Role:    openai.ChatMessageRoleUser,
 		Content: text,
 	})
-
-	// Define the function for hanging up
-	functionDefinition := openai.FunctionDefinition{
-		Name:        "hangup",
-		Description: "End the conversation and hang up the call",
-		Parameters: json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"reason": {
-					"type": "string",
-					"description": "Reason for hanging up the call"
-				}
-			},
-			"required": []
-		}`),
-	}
 
 	// Construct the OpenAI request
 	if model == "" {
@@ -92,9 +103,15 @@ func (h *LLMHandler) QueryStream(model, text string, ttsCallback func(segment st
 		Tools: []openai.Tool{
 			{
 				Type:     openai.ToolTypeFunction,
-				Function: &functionDefinition,
+				Function: &hangupDefinition,
 			},
 		},
+	}
+	if h.ReferTarget != "" {
+		request.Tools = append(request.Tools, openai.Tool{
+			Type:     openai.ToolTypeFunction,
+			Function: &referDefinition,
+		})
 	}
 
 	// Generate a unique playID for this conversation
@@ -112,7 +129,7 @@ func (h *LLMHandler) QueryStream(model, text string, ttsCallback func(segment st
 	var buffer string
 	fullResponse := ""
 	var shouldHangup bool
-
+	var shouldRefer bool
 	// Regular expression to detect punctuation followed by space or end of string
 	punctuationRegex := regexp.MustCompile(`([.,;:!?，。！？；：])\s*`)
 
@@ -134,6 +151,11 @@ func (h *LLMHandler) QueryStream(model, text string, ttsCallback func(segment st
 					h.logger.Info("LLM requested hangup")
 					shouldHangup = true
 				}
+				if toolCall.Function.Name == "refer" {
+					h.logger.WithField("referTarget", h.ReferTarget).Info("LLM requested refer")
+					// Handle refer logic here if needed
+					shouldRefer = true
+				}
 			}
 		}
 
@@ -152,7 +174,7 @@ func (h *LLMHandler) QueryStream(model, text string, ttsCallback func(segment st
 					segment := buffer[lastIdx:match[1]]
 					if segment != "" {
 						// Send this segment to TTS with the same playId
-						if err := ttsCallback(segment, playID, false); err != nil {
+						if err := ttsCallback(segment, playID, false, false); err != nil {
 							h.logger.WithError(err).Error("Failed to send TTS segment")
 						}
 					}
@@ -170,7 +192,7 @@ func (h *LLMHandler) QueryStream(model, text string, ttsCallback func(segment st
 	}
 
 	// Send any remaining text in the buffer
-	if err := ttsCallback(buffer, playID, shouldHangup); err != nil {
+	if err := ttsCallback(buffer, playID, shouldHangup, shouldRefer); err != nil {
 		h.logger.WithError(err).Error("Failed to send final TTS segment")
 	}
 
@@ -189,7 +211,7 @@ func (h *LLMHandler) QueryStream(model, text string, ttsCallback func(segment st
 }
 
 // Query the LLM with text and get a response (non-streaming version, kept for compatibility)
-func (h *LLMHandler) Query(model, text string) (string, *HangupTool, error) {
+func (h *LLMHandler) Query(model, text string) (string, *HangupTool, *bool, error) {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
@@ -198,22 +220,6 @@ func (h *LLMHandler) Query(model, text string) (string, *HangupTool, error) {
 		Role:    openai.ChatMessageRoleUser,
 		Content: text,
 	})
-
-	// Define the function for hanging up
-	functionDefinition := openai.FunctionDefinition{
-		Name:        "hangup",
-		Description: "End the conversation and hang up the call",
-		Parameters: json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"reason": {
-					"type": "string",
-					"description": "Reason for hanging up the call"
-				}
-			},
-			"required": []
-		}`),
-	}
 
 	// Construct the OpenAI request
 	if model == "" {
@@ -226,15 +232,20 @@ func (h *LLMHandler) Query(model, text string) (string, *HangupTool, error) {
 		Tools: []openai.Tool{
 			{
 				Type:     openai.ToolTypeFunction,
-				Function: &functionDefinition,
+				Function: &hangupDefinition,
 			},
 		},
 	}
-
+	if h.ReferTarget != "" {
+		request.Tools = append(request.Tools, openai.Tool{
+			Type:     openai.ToolTypeFunction,
+			Function: &referDefinition,
+		})
+	}
 	// Send the request to OpenAI
 	response, err := h.client.CreateChatCompletion(h.ctx, request)
 	if err != nil {
-		return "", nil, fmt.Errorf("error querying OpenAI: %w", err)
+		return "", nil, nil, fmt.Errorf("error querying OpenAI: %w", err)
 	}
 
 	// Process the response
@@ -255,10 +266,16 @@ func (h *LLMHandler) Query(model, text string) (string, *HangupTool, error) {
 					h.logger.WithField("reason", hangupTool.Reason).Info("llm: Hangup reason")
 				}
 			}
+			if toolCall.Function.Name == "refer" {
+				h.logger.WithField("referTarget", h.ReferTarget).Info("llm: Refer requested")
+				// Handle refer logic here if needed
+				shouldRefer := true
+				return message.Content, nil, &shouldRefer, nil
+			}
 		}
 	}
 
-	return message.Content, hangupTool, nil
+	return message.Content, hangupTool, nil, nil
 }
 
 // Reset clears the conversation history but keeps the system prompt

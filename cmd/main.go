@@ -29,6 +29,8 @@ type CreateClientOption struct {
 	SystemPrompt   string
 	BreakOnVad     bool
 	CallOption     rustpbxgo.CallOption
+	ReferCaller    string
+	ReferCallee    string
 }
 
 func createClient(ctx context.Context, option CreateClientOption, id string) *rustpbxgo.Client {
@@ -38,6 +40,7 @@ func createClient(ctx context.Context, option CreateClientOption, id string) *ru
 		rustpbxgo.WithID(id),
 	)
 	option.LLMHandler = NewLLMHandler(ctx, option.OpenaiKey, option.OpenaiEndpoint, option.SystemPrompt, option.Logger)
+	option.LLMHandler.ReferTarget = option.ReferCallee
 
 	client.OnClose = func(reason string) {
 		option.Logger.Infof("Connection closed: %s", reason)
@@ -67,7 +70,12 @@ func createClient(ctx context.Context, option CreateClientOption, id string) *ru
 		}
 
 		startTime = time.Now()
-		response, err := option.LLMHandler.QueryStream(option.OpenaiModel, event.Text, func(segment string, playID string, autoHangup bool) error {
+		response, err := option.LLMHandler.QueryStream(option.OpenaiModel, event.Text, func(segment string, playID string, autoHangup, shouldRefer bool) error {
+			if shouldRefer {
+				option.Logger.Infof("Refering to target: %s => %s", option.ReferCaller, option.ReferCallee)
+				return client.Refer(option.ReferCaller, option.ReferCallee, nil)
+			}
+
 			if len(segment) == 0 {
 				return nil
 			}
@@ -149,6 +157,8 @@ func main() {
 	var eouType string = ""
 	var eouEndpoint string = ""
 	var silenceTimeout uint = 5000
+	var referCallee string = ""
+
 	flag.StringVar(&endpoint, "endpoint", endpoint, "Endpoint to connect to")
 	flag.StringVar(&codec, "codec", codec, "Codec to use: g722, pcmu")
 	flag.StringVar(&openaiKey, "openai-key", openaiKey, "OpenAI API key")
@@ -180,12 +190,20 @@ func main() {
 	flag.StringVar(&eouType, "eou-type", eouType, "EOU type to use")
 	flag.StringVar(&eouEndpoint, "eou-endpoint", eouEndpoint, "EOU endpoint to use")
 	flag.UintVar(&silenceTimeout, "silence-timeout", silenceTimeout, "VAD silence timeout in milliseconds")
+	flag.StringVar(&referCallee, "refer", referCallee, "Refer callee for SIP REFER")
+
 	flag.Parse()
 	u, err := url.Parse(endpoint)
 	if err != nil {
 		fmt.Printf("Failed to parse endpoint: %v", err)
 		os.Exit(1)
 	}
+
+	if referCallee != "" && caller == "" {
+		fmt.Printf("Caller must be set when refer is used")
+		os.Exit(1)
+	}
+
 	endpointHost := u.Host
 	endpointSecurity := strings.ToLower(u.Scheme) == "wss"
 	if openaiKey == "" {
@@ -292,6 +310,8 @@ func main() {
 		callOption.Sip = &sipOption
 	}
 	option.CallOption = callOption
+	option.ReferCallee = referCallee
+	option.ReferCaller = caller
 
 	if webhookAddr != "" {
 		serveWebhook(ctx, option, webhookAddr, webhookPrefix)
@@ -356,7 +376,6 @@ func main() {
 	}
 	// Initial greeting
 	client.TTS("Hello, how can I help you?", "", "", false, nil, nil)
-
 	<-sigChan
 	fmt.Println("Shutting down...")
 }

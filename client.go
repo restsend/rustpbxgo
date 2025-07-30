@@ -273,7 +273,8 @@ type HangupCommand struct {
 // ReferCommand transfers the call
 type ReferCommand struct {
 	Command string       `json:"command"`
-	Target  string       `json:"target"`
+	Caller  string       `json:"caller"`
+	Callee  string       `json:"callee"`
 	Options *ReferOption `json:"options,omitempty"`
 }
 
@@ -377,10 +378,12 @@ type EouOption struct {
 
 // ReferOption represents options for refer command
 type ReferOption struct {
-	Bypass      bool   `json:"bypass,omitempty"`
-	Timeout     uint32 `json:"timeout,omitempty"`
-	MusicOnHold string `json:"moh,omitempty"`
-	AutoHangup  bool   `json:"autoHangup,omitempty"`
+	Denoise     bool       `json:"denoise,omitempty"`
+	Timeout     uint32     `json:"timeout,omitempty"`
+	MusicOnHold string     `json:"moh,omitempty"`
+	AutoHangup  bool       `json:"autoHangup,omitempty"`
+	Sip         *SipOption `json:"sip,omitempty"`
+	ASR         *ASROption `json:"asr,omitempty"`
 }
 
 type ClientOption func(*Client)
@@ -824,11 +827,17 @@ func (c *Client) Hangup(reason string) error {
 	return c.sendCommand(cmd)
 }
 
-// Refer sends a command to transfer the call
-func (c *Client) Refer(target string, options *ReferOption) error {
+// Refer sends a command to transfer the call.
+//
+// Parameters:
+//   - caller: the caller to transfer the call from, eg. "sip:alice@restsend.com"
+//   - callee: the callee to transfer the call to, eg. "sip:bob@restsend.com"
+//   - options: optional parameters for the transfer
+func (c *Client) Refer(caller, callee string, options *ReferOption) error {
 	cmd := ReferCommand{
 		Command: "refer",
-		Target:  target,
+		Caller:  caller,
+		Callee:  callee,
 		Options: options,
 	}
 	return c.sendCommand(cmd)
