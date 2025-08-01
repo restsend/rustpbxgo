@@ -59,7 +59,8 @@ func NewMediaHandler(ctx context.Context, logger *logrus.Logger) (*MediaHandler,
 func (mh *MediaHandler) Setup(codec string, iceServers []webrtc.ICEServer) (string, error) {
 	mediaEngine := webrtc.MediaEngine{}
 	var codecParams webrtc.RTPCodecParameters
-	if codec == "g722" {
+	switch codec {
+	case "g722":
 		codecParams = webrtc.RTPCodecParameters{
 			RTPCodecCapability: webrtc.RTPCodecCapability{
 				MimeType:  webrtc.MimeTypeG722,
@@ -67,7 +68,15 @@ func (mh *MediaHandler) Setup(codec string, iceServers []webrtc.ICEServer) (stri
 			},
 			PayloadType: 9,
 		}
-	} else {
+	case "pcma":
+		codecParams = webrtc.RTPCodecParameters{
+			RTPCodecCapability: webrtc.RTPCodecCapability{
+				MimeType:  webrtc.MimeTypePCMA,
+				ClockRate: 8000,
+			},
+			PayloadType: 8,
+		}
+	default:
 		codecParams = webrtc.RTPCodecParameters{
 			RTPCodecCapability: webrtc.RTPCodecCapability{
 				MimeType:  webrtc.MimeTypePCMU,
@@ -113,9 +122,12 @@ func (mh *MediaHandler) Setup(codec string, iceServers []webrtc.ICEServer) (stri
 					break
 				}
 				var audioData []byte
-				if codec == "g722" {
+				switch codec {
+				case "g722":
 					audioData = g722Decoder.Decode(rtpPacket.Payload)
-				} else {
+				case "pcma":
+					audioData, _ = go711.DecodePCMA(rtpPacket.Payload)
+				default:
 					audioData, _ = go711.DecodePCMU(rtpPacket.Payload)
 				}
 				// Add to playback buffer
@@ -191,9 +203,12 @@ func (mh *MediaHandler) encodeAndSendAudio(codec string) {
 		mh.buffer = mh.buffer[framesize:]
 		mh.bufferMutex.Unlock()
 		var payload []byte
-		if codec == "g722" {
+		switch codec {
+		case "g722":
 			payload = g722Encoder.Encode(audioData)
-		} else {
+		case "pcma":
+			payload, _ = go711.EncodePCMA(audioData)
+		default:
 			payload, _ = go711.EncodePCMU(audioData)
 		}
 		// Create media sample

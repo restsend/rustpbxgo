@@ -160,7 +160,7 @@ func main() {
 	var referCallee string = ""
 
 	flag.StringVar(&endpoint, "endpoint", endpoint, "Endpoint to connect to")
-	flag.StringVar(&codec, "codec", codec, "Codec to use: g722, pcmu")
+	flag.StringVar(&codec, "codec", codec, "Codec to use: g722, pcmu, pcma")
 	flag.StringVar(&openaiKey, "openai-key", openaiKey, "OpenAI API key")
 	flag.StringVar(&openaiModel, "model", openaiModel, "OpenAI model to use: qwen-14b, qwen-turbo")
 	flag.StringVar(&openaiEndpoint, "openai-endpoint", openaiEndpoint, "OpenAI endpoint to use")
