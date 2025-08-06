@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/gorilla/websocket"
 	"github.com/sirupsen/logrus"
@@ -41,6 +42,7 @@ type Client struct {
 	conn                     *websocket.Conn
 	logger                   *logrus.Logger
 	id                       string
+	dumpEvents               bool
 	onAnswer                 OnAnswer
 	OnClose                  OnClose
 	OnEvent                  OnEvent
@@ -416,6 +418,11 @@ func WithID(id string) ClientOption {
 		c.id = id
 	}
 }
+func WithDumpEvents(dump bool) ClientOption {
+	return func(c *Client) {
+		c.dumpEvents = dump
+	}
+}
 
 func (c *Client) Connect(callType string) error {
 	if c.cancel == nil {
@@ -425,6 +432,14 @@ func (c *Client) Connect(callType string) error {
 	url += "/call/" + callType
 	if c.id != "" {
 		url = fmt.Sprintf("%s?id=%s", url, c.id)
+	}
+	if c.dumpEvents {
+		if strings.Contains(url, "?") {
+			url += "&"
+		} else {
+			url += "?"
+		}
+		url += "dump=true"
 	}
 	var err error
 	c.conn, _, err = websocket.DefaultDialer.Dial(url, nil)

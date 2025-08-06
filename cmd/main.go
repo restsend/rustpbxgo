@@ -38,6 +38,7 @@ func createClient(ctx context.Context, option CreateClientOption, id string) *ru
 		rustpbxgo.WithLogger(option.Logger),
 		rustpbxgo.WithContext(ctx),
 		rustpbxgo.WithID(id),
+		rustpbxgo.WithDumpEvents(true),
 	)
 	option.LLMHandler = NewLLMHandler(ctx, option.OpenaiKey, option.OpenaiEndpoint, option.SystemPrompt, option.Logger)
 	option.LLMHandler.ReferTarget = option.ReferCallee
