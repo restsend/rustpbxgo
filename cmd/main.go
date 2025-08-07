@@ -159,7 +159,8 @@ func main() {
 	var eouEndpoint string = ""
 	var silenceTimeout uint = 5000
 	var referCallee string = ""
-
+	var forceRefer bool = false
+	var greeting string = "Hello, how can I help you?"
 	flag.StringVar(&endpoint, "endpoint", endpoint, "Endpoint to connect to")
 	flag.StringVar(&codec, "codec", codec, "Codec to use: g722, pcmu, pcma")
 	flag.StringVar(&openaiKey, "openai-key", openaiKey, "OpenAI API key")
@@ -192,6 +193,8 @@ func main() {
 	flag.StringVar(&eouEndpoint, "eou-endpoint", eouEndpoint, "EOU endpoint to use")
 	flag.UintVar(&silenceTimeout, "silence-timeout", silenceTimeout, "VAD silence timeout in milliseconds")
 	flag.StringVar(&referCallee, "refer", referCallee, "Refer callee for SIP REFER")
+	flag.BoolVar(&forceRefer, "force-refer", forceRefer, "Force refer to callee")
+	flag.StringVar(&greeting, "greeting", greeting, "Initial greeting message")
 
 	flag.Parse()
 	u, err := url.Parse(endpoint)
@@ -376,7 +379,15 @@ func main() {
 		}
 	}
 	// Initial greeting
-	client.TTS("Hello, how can I help you?", "", "", false, nil, nil)
+	if forceRefer {
+		option.Logger.Infof("Forcing refer to target: %s => %s", option.ReferCaller, option.ReferCallee)
+		if err := client.Refer(option.ReferCaller, option.ReferCallee, nil); err != nil {
+			option.Logger.Errorf("Failed to refer: %v", err)
+			return
+		}
+	} else {
+		client.TTS(greeting, "", "", false, nil, nil)
+	}
 	<-sigChan
 	fmt.Println("Shutting down...")
 }
