@@ -97,7 +97,7 @@ func createClient(ctx context.Context, option CreateClientOption, id string) *ru
 	}
 	client.OnHangup = func(event rustpbxgo.HangupEvent) {
 		option.Logger.Infof("Hangup: %s", event.Reason)
-		option.SigChan <- true
+		//option.SigChan <- true
 	}
 	// Handle ASR Delta events (partial results)
 	client.OnAsrDelta = func(event rustpbxgo.AsrDeltaEvent) {
@@ -261,23 +261,32 @@ func main() {
 			Samplerate: 16000,
 		}
 	}
-	callOption := rustpbxgo.CallOption{
-		Recorder: recorder,
-		Denoise:  true,
-		VAD: &rustpbxgo.VADOption{
-			Type:           vadModel,
-			Endpoint:       vadEndpoint,
-			SecretKey:      vadSecretKey,
-			SilenceTimeout: silenceTimeout,
-		},
-		ASR: &rustpbxgo.ASROption{
+	var asrOption *rustpbxgo.ASROption
+	if asrProvider != "" {
+		asrOption = &rustpbxgo.ASROption{
 			Provider:  asrProvider,
 			Endpoint:  asrEndpoint,
 			AppID:     asrAppID,
 			SecretID:  asrSecretID,
 			SecretKey: asrSecretKey,
 			ModelType: asrModelType,
-		},
+		}
+	}
+	var vadOption *rustpbxgo.VADOption
+	if vadModel != "" {
+		vadOption = &rustpbxgo.VADOption{
+			Type:           vadModel,
+			Endpoint:       vadEndpoint,
+			SecretKey:      vadSecretKey,
+			SilenceTimeout: silenceTimeout,
+		}
+	}
+
+	callOption := rustpbxgo.CallOption{
+		Recorder: recorder,
+		Denoise:  true,
+		VAD:      vadOption,
+		ASR:      asrOption,
 		TTS: &rustpbxgo.TTSOption{
 			Provider:  ttsProvider,
 			Speaker:   speaker,
