@@ -447,8 +447,13 @@ func (c *Client) Connect(callType string) error {
 		return err
 	}
 
-	c.eventChan = make(chan []byte)
+	c.eventChan = make(chan []byte, 8)
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				c.logger.Errorf("Panic in WebSocket read loop: %v", r)
+			}
+		}()
 		for {
 			mt, message, err := c.conn.ReadMessage()
 			if err != nil {
@@ -466,23 +471,31 @@ func (c *Client) Connect(callType string) error {
 			case c.eventChan <- message:
 			case <-c.ctx.Done():
 				return
+			default:
+				c.logger.Warnf("Event channel is full, dropping message: %s", string(message))
 			}
 		}
 	}()
 
 	go func() {
-		defer close(c.eventChan)
-		defer c.conn.Close()
+		defer func() {
+			if r := recover(); r != nil {
+				c.logger.Errorf("Panic in event processing loop: %v", r)
+			}
+		}()
 
 		for {
 			select {
 			case <-c.ctx.Done():
+				close(c.eventChan)
+				c.conn.Close()
+				c.logger.Info("Context cancelled, shutting down event processing")
 				return
 			case message, ok := <-c.eventChan:
 				if !ok {
 					return
 				}
-				c.processEvent(message)
+				go c.processEvent(message)
 			}
 		}
 	}()
@@ -704,15 +717,30 @@ func (c *Client) Invite(ctx context.Context, option CallOption) (*AnswerEvent, e
 	}
 	onError := c.OnError
 	c.OnError = func(event ErrorEvent) {
-		ch <- event
+		select {
+		case ch <- event:
+		default:
+			c.logger.Errorf("Error event channel is full, dropping event: %s", event.Error)
+			onError(event)
+		}
 	}
 	onReject := c.OnReject
 	c.OnReject = func(event RejectEvent) {
-		ch <- event
+		select {
+		case ch <- event:
+		default:
+			c.logger.Errorf("Reject event channel is full, dropping event: %s", event.Reason)
+			onReject(event)
+		}
 	}
 	onHangup := c.OnHangup
 	c.OnHangup = func(event HangupEvent) {
-		ch <- event
+		select {
+		case ch <- event:
+		default:
+			c.logger.Errorf("Hangup event channel is full, dropping event: %s", event.Reason)
+			onHangup(event)
+		}
 	}
 	defer func() {
 		c.onAnswer = onAnswer
