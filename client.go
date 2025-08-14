@@ -223,6 +223,12 @@ type AcceptCommand struct {
 	Option  CallOption `json:"option"`
 }
 
+// RingingCommand sends a ringing command to the server
+type RingingCommand struct {
+	Command  string `json:"command"`
+	Ringtone string `json:"ringtone,omitempty"`
+}
+
 // RejectCommand rejects an incoming call
 type RejectCommand struct {
 	Command string `json:"command"`
@@ -774,6 +780,15 @@ func (c *Client) Invite(ctx context.Context, option CallOption) (*AnswerEvent, e
 		}
 		return nil, errors.New("invalid event type")
 	}
+}
+
+// Ringing sends a ringing command to the server
+func (c *Client) Ringing(ringtone string) error {
+	cmd := RingingCommand{
+		Command:  "ringing",
+		Ringtone: ringtone,
+	}
+	return c.sendCommand(cmd)
 }
 
 // Accept sends an accept command to accept an incoming call
