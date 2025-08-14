@@ -97,9 +97,12 @@ type RingingEvent struct {
 }
 
 type HangupEvent struct {
-	Timestamp uint64 `json:"timestamp"`
-	Reason    string `json:"reason"`
-	Initiator string `json:"initiator"`
+	Timestamp   uint64  `json:"timestamp"`
+	Reason      string  `json:"reason"`
+	Initiator   string  `json:"initiator"`
+	StartTime   string  `json:"startTime,omitempty"`
+	AnswerTime  *string `json:"answerTime,omitempty"`
+	RingingTime *string `json:"ringingTime,omitempty"`
 }
 
 type AnswerMachineDetectionEvent struct {

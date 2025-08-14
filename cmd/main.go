@@ -161,6 +161,7 @@ func main() {
 	var referCallee string = ""
 	var forceRefer bool = false
 	var greeting string = "Hello, how can I help you?"
+
 	flag.StringVar(&endpoint, "endpoint", endpoint, "Endpoint to connect to")
 	flag.StringVar(&codec, "codec", codec, "Codec to use: g722, pcmu, pcma")
 	flag.StringVar(&openaiKey, "openai-key", openaiKey, "OpenAI API key")
