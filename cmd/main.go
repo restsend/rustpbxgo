@@ -121,6 +121,16 @@ func createClient(ctx context.Context, option CreateClientOption, id string) *ru
 			option.Logger.Warnf("Failed to interrupt TTS: %v", err)
 		}
 	}
+	client.OnInterruption = func(event rustpbxgo.InterruptionEvent) {
+		option.Logger.Infof("OnInterruption")
+		if nil != event.Subtitle {
+			option.Logger.Infof("OnInterruption: subtitle:%s", *event.Subtitle)
+		}
+		if nil != event.Position {
+			option.Logger.Infof("OnInterruption: position:%d", *event.Position)
+		}
+		option.Logger.Infof("OnInterruption: current: %d, totalDuration: %d", event.Current, event.TotalDuration)
+	}
 	return client
 }
 

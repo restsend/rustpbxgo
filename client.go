@@ -143,9 +143,12 @@ type TrackEndEvent struct {
 }
 
 type InterruptionEvent struct {
-	TrackID   string `json:"trackId"`
-	Timestamp uint64 `json:"timestamp"`
-	Position  uint64 `json:"position"`
+	TrackID       string  `json:"trackId"`
+	Timestamp     uint64  `json:"timestamp"`
+	Subtitle      *string `json:"subtitle,omitempty"`
+	Position      *uint32 `json:"position,omitempty"`
+	TotalDuration uint32  `json:"totalDuration"`
+	Current       uint32  `json:"current"`
 }
 
 type AsrFinalEvent struct {
