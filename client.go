@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"runtime"
 	"strings"
 
 	"github.com/gorilla/websocket"
@@ -38,6 +39,7 @@ type Client struct {
 	ctx                      context.Context
 	cancel                   context.CancelFunc
 	eventChan                chan []byte
+	cmdChan                  chan any
 	endpoint                 string
 	conn                     *websocket.Conn
 	logger                   *logrus.Logger
@@ -460,6 +462,7 @@ func (c *Client) Connect(callType string) error {
 	}
 
 	c.eventChan = make(chan []byte, 8)
+	c.cmdChan = make(chan any, 8)
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
@@ -503,6 +506,19 @@ func (c *Client) Connect(callType string) error {
 				c.conn.Close()
 				c.logger.Info("Context cancelled, shutting down event processing")
 				return
+			case cmd, ok := <-c.cmdChan:
+				if !ok {
+					return
+				}
+
+				c.logger.WithFields(logrus.Fields{
+					"command": cmd,
+				}).Debug("Sending command")
+				err = c.conn.WriteJSON(cmd)
+				if err != nil {
+					c.logger.Errorf("Error sending command: %v", err)
+					return
+				}
 			case message, ok := <-c.eventChan:
 				if !ok {
 					return
@@ -517,7 +533,9 @@ func (c *Client) Connect(callType string) error {
 func (c *Client) processEvent(message []byte) {
 	defer func() {
 		if r := recover(); r != nil {
-			c.logger.Errorf("Panic in processEvent: %v %s", r, string(message))
+			var buf [4096]byte
+			runtime.Stack(buf[:], false)
+			c.logger.Errorf("Panic in processEvent: %v %s \n%s", r, string(message), string(buf[:]))
 		}
 	}()
 	var ev event
@@ -940,8 +958,6 @@ func (c *Client) sendCommand(cmd any) error {
 	if c.conn == nil {
 		return errors.New("client not initialized")
 	}
-	c.logger.WithFields(logrus.Fields{
-		"command": cmd,
-	}).Debug("Sending command")
-	return c.conn.WriteJSON(cmd)
+	c.cmdChan <- cmd
+	return nil
 }

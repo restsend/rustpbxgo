@@ -78,6 +78,10 @@ func createClient(ctx context.Context, option CreateClientOption, id string) *ru
 			}
 
 			if len(segment) == 0 {
+				if autoHangup {
+					option.Logger.Infof("Auto hangup after LLM response")
+					return client.Hangup("LLM hangup")
+				}
 				return nil
 			}
 			option.Logger.WithFields(logrus.Fields{
@@ -171,7 +175,8 @@ func main() {
 	var referCallee string = ""
 	var forceRefer bool = false
 	var greeting string = "Hello, how can I help you?"
-
+	var level = "info"
+	flag.StringVar(&level, "log-level", level, "Log level: debug, info, warn, error")
 	flag.StringVar(&endpoint, "endpoint", endpoint, "Endpoint to connect to")
 	flag.StringVar(&codec, "codec", codec, "Codec to use: g722, pcmu, pcma")
 	flag.StringVar(&openaiKey, "openai-key", openaiKey, "OpenAI API key")
@@ -247,7 +252,11 @@ func main() {
 	// Create logger
 	logger := logrus.New()
 	logger.SetOutput(os.Stdout)
-	logger.SetLevel(logrus.InfoLevel)
+	if lel, err := logrus.ParseLevel(level); err == nil {
+		logger.SetLevel(lel)
+	} else {
+		logger.SetLevel(logrus.InfoLevel)
+	}
 
 	// Create context with cancellation
 	ctx, cancel := context.WithCancel(context.Background())
@@ -406,7 +415,9 @@ func main() {
 			return
 		}
 	} else {
-		client.TTS(greeting, "", "", false, nil, nil)
+		client.TTS(greeting, "", "1", false, nil, nil)
+		client.TTS("😄", "", "1", false, nil, nil)
+		client.TTS("你好", "", "1", false, nil, nil)
 	}
 	<-sigChan
 	fmt.Println("Shutting down...")

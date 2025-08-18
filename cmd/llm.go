@@ -196,15 +196,25 @@ func (h *LLMHandler) QueryStream(model, text string, ttsCallback func(segment st
 		h.logger.WithError(err).Error("Failed to send final TTS segment")
 	}
 
-	// Add assistant's complete response to conversation history
-	h.messages = append(h.messages, openai.ChatCompletionMessage{
-		Role:    openai.ChatMessageRoleAssistant,
-		Content: fullResponse,
-	})
-
+	if shouldHangup {
+		h.messages = append(h.messages, openai.ChatCompletionMessage{
+			Role:    openai.ChatMessageRoleAssistant,
+			Content: "user requested hangup",
+		})
+	} else if shouldRefer {
+		h.messages = append(h.messages, openai.ChatCompletionMessage{
+			Role:    openai.ChatMessageRoleAssistant,
+			Content: "user requested refer",
+		})
+	} else {
+		h.messages = append(h.messages, openai.ChatCompletionMessage{
+			Role:    openai.ChatMessageRoleAssistant,
+			Content: fullResponse,
+		})
+	}
 	h.logger.WithFields(logrus.Fields{
-		"responseLength": len(fullResponse),
-		"hangup":         shouldHangup,
+		"fullResponse": fullResponse,
+		"hangup":       shouldHangup,
 	}).Info("LLM stream completed")
 
 	return fullResponse, nil
