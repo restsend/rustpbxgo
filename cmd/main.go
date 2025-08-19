@@ -416,8 +416,6 @@ func main() {
 		}
 	} else {
 		client.TTS(greeting, "", "1", false, nil, nil)
-		client.TTS("😄", "", "1", false, nil, nil)
-		client.TTS("你好", "", "1", false, nil, nil)
 	}
 	<-sigChan
 	fmt.Println("Shutting down...")
