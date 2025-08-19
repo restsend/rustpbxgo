@@ -98,13 +98,23 @@ type RingingEvent struct {
 	EarlyMedia bool   `json:"earlyMedia"`
 }
 
+type HangupEventAttendee struct {
+	Username string `json:"username"`
+	Realm    string `json:"realm"`
+	Source   string `json:"source"`
+}
+
 type HangupEvent struct {
-	Timestamp   uint64  `json:"timestamp"`
-	Reason      string  `json:"reason"`
-	Initiator   string  `json:"initiator"`
-	StartTime   string  `json:"startTime,omitempty"`
-	AnswerTime  *string `json:"answerTime,omitempty"`
-	RingingTime *string `json:"ringingTime,omitempty"`
+	Timestamp   uint64               `json:"timestamp"`
+	Reason      string               `json:"reason"`
+	Initiator   string               `json:"initiator"`
+	StartTime   string               `json:"startTime,omitempty"`
+	HangupTime  string               `json:"hangupTime,omitempty"`
+	AnswerTime  *string              `json:"answerTime,omitempty"`
+	RingingTime *string              `json:"ringingTime,omitempty"`
+	From        *HangupEventAttendee `json:"from,omitempty"`
+	To          *HangupEventAttendee `json:"to,omitempty"`
+	Extra       map[string]any       `json:"extra,omitempty"`
 }
 
 type AnswerMachineDetectionEvent struct {
