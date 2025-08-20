@@ -81,7 +81,7 @@ func NewLLMHandler(ctx context.Context, apiKey, endpoint, systemPrompt string, l
 }
 
 // QueryStream processes the LLM response as a stream and sends segments to TTS as they arrive
-func (h *LLMHandler) QueryStream(model, text string, ttsCallback func(segment string, playID string, autoHangup, shouldRefer bool) error) (string, error) {
+func (h *LLMHandler) QueryStream(model, text string, ttsStreaming bool, ttsCallback func(segment string, playID string, autoHangup, shouldRefer, endOfStream bool) error) (string, error) {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
@@ -162,8 +162,12 @@ func (h *LLMHandler) QueryStream(model, text string, ttsCallback func(segment st
 		// Process content if available
 		if len(response.Choices) > 0 && response.Choices[0].Delta.Content != "" {
 			content := response.Choices[0].Delta.Content
-			buffer += content
 			fullResponse += content
+			if ttsStreaming {
+				ttsCallback(content, playID, false, false, false)
+				continue
+			}
+			buffer += content
 
 			// Check for punctuation in the buffer
 			matches := punctuationRegex.FindAllStringSubmatchIndex(buffer, -1)
@@ -174,7 +178,7 @@ func (h *LLMHandler) QueryStream(model, text string, ttsCallback func(segment st
 					segment := buffer[lastIdx:match[1]]
 					if segment != "" {
 						// Send this segment to TTS with the same playId
-						if err := ttsCallback(segment, playID, false, false); err != nil {
+						if err := ttsCallback(segment, playID, false, false, false); err != nil {
 							h.logger.WithError(err).Error("Failed to send TTS segment")
 						}
 					}
@@ -192,7 +196,8 @@ func (h *LLMHandler) QueryStream(model, text string, ttsCallback func(segment st
 	}
 
 	// Send any remaining text in the buffer
-	if err := ttsCallback(buffer, playID, shouldHangup, shouldRefer); err != nil {
+
+	if err := ttsCallback(buffer, playID, shouldHangup, shouldRefer, true); err != nil {
 		h.logger.WithError(err).Error("Failed to send final TTS segment")
 	}
 

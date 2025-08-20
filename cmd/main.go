@@ -31,6 +31,7 @@ type CreateClientOption struct {
 	CallOption     rustpbxgo.CallOption
 	ReferCaller    string
 	ReferCallee    string
+	TTSStreaming   bool
 }
 
 func createClient(ctx context.Context, option CreateClientOption, id string) *rustpbxgo.Client {
@@ -71,17 +72,23 @@ func createClient(ctx context.Context, option CreateClientOption, id string) *ru
 		}
 
 		startTime = time.Now()
-		response, err := option.LLMHandler.QueryStream(option.OpenaiModel, event.Text, func(segment string, playID string, autoHangup, shouldRefer bool) error {
+		response, err := option.LLMHandler.QueryStream(option.OpenaiModel, event.Text, option.TTSStreaming, func(segment string, playID string, autoHangup, shouldRefer, endOfStream bool) error {
 			if shouldRefer {
 				option.Logger.Infof("Refering to target: %s => %s", option.ReferCaller, option.ReferCallee)
 				return client.Refer(option.ReferCaller, option.ReferCallee, nil)
 			}
 
 			if len(segment) == 0 {
+				if option.TTSStreaming && endOfStream {
+					option.Logger.Infof("Sending final TTS segment")
+					client.StreamTTS("", "", playID, autoHangup, true, nil, nil)
+				}
+
 				if autoHangup {
 					option.Logger.Infof("Auto hangup after LLM response")
 					return client.Hangup("LLM hangup")
 				}
+
 				return nil
 			}
 			option.Logger.WithFields(logrus.Fields{
@@ -89,7 +96,13 @@ func createClient(ctx context.Context, option CreateClientOption, id string) *ru
 				"playID":     playID,
 				"autoHangup": autoHangup,
 			}).Info("Sending TTS segment")
-			return client.TTS(segment, "", playID, autoHangup, nil, nil)
+
+			if option.TTSStreaming {
+				return client.StreamTTS(segment, "", playID, autoHangup, endOfStream, nil, nil)
+			} else {
+				return client.TTS(segment, "", playID, autoHangup, nil, nil)
+			}
+
 		})
 
 		if err != nil {
@@ -176,6 +189,7 @@ func main() {
 	var forceRefer bool = false
 	var greeting string = "Hello, how can I help you?"
 	var level = "info"
+	var ttsStreaming bool = false
 	flag.StringVar(&level, "log-level", level, "Log level: debug, info, warn, error")
 	flag.StringVar(&endpoint, "endpoint", endpoint, "Endpoint to connect to")
 	flag.StringVar(&codec, "codec", codec, "Codec to use: g722, pcmu, pcma")
@@ -211,7 +225,7 @@ func main() {
 	flag.StringVar(&referCallee, "refer", referCallee, "Refer callee for SIP REFER")
 	flag.BoolVar(&forceRefer, "force-refer", forceRefer, "Force refer to callee")
 	flag.StringVar(&greeting, "greeting", greeting, "Initial greeting message")
-
+	flag.BoolVar(&ttsStreaming, "tts-streaming", ttsStreaming, "enable TTS streaming")
 	flag.Parse()
 	u, err := url.Parse(endpoint)
 	if err != nil {
@@ -345,7 +359,7 @@ func main() {
 	option.CallOption = callOption
 	option.ReferCallee = referCallee
 	option.ReferCaller = caller
-
+	option.TTSStreaming = ttsStreaming
 	if webhookAddr != "" {
 		serveWebhook(ctx, option, webhookAddr, webhookPrefix)
 		return
@@ -415,7 +429,11 @@ func main() {
 			return
 		}
 	} else {
-		client.TTS(greeting, "", "1", false, nil, nil)
+		if ttsStreaming {
+			client.StreamTTS(greeting, "", "1", false, true, nil, nil)
+		} else {
+			client.TTS(greeting, "", "1", false, nil, nil)
+		}
 	}
 	<-sigChan
 	fmt.Println("Shutting down...")
