@@ -56,6 +56,12 @@ func createClient(ctx context.Context, option CreateClientOption, id string) *ru
 	client.OnDTMF = func(event rustpbxgo.DTMFEvent) {
 		option.Logger.Infof("DTMF: %s", event.Digit)
 	}
+	client.OnRinging = func(event rustpbxgo.RingingEvent) {
+		option.Logger.WithFields(logrus.Fields{
+			"id":         event.TrackID,
+			"earlyMedia": event.EarlyMedia,
+		}).Info("Ringing")
+	}
 	// Handle ASR Final events
 	client.OnAsrFinal = func(event rustpbxgo.AsrFinalEvent) {
 		if event.Text != "" {
