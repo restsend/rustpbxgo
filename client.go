@@ -149,9 +149,10 @@ type TrackStartEvent struct {
 }
 
 type TrackEndEvent struct {
-	TrackID   string `json:"trackId"`
-	Timestamp uint64 `json:"timestamp"`
-	Duration  uint64 `json:"duration"`
+	TrackID   string  `json:"trackId"`
+	Timestamp uint64  `json:"timestamp"`
+	Duration  uint64  `json:"duration"`
+	PlayId    *string `json:"playId,omitempty"`
 }
 
 type InterruptionEvent struct {

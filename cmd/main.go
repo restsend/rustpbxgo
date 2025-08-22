@@ -43,6 +43,17 @@ func createClient(ctx context.Context, option CreateClientOption, id string) *ru
 	option.LLMHandler = NewLLMHandler(ctx, option.OpenaiKey, option.OpenaiEndpoint, option.SystemPrompt, option.Logger)
 	option.LLMHandler.ReferTarget = option.ReferCallee
 
+	client.OnTrackEnd = func(event rustpbxgo.TrackEndEvent) {
+		playId := ""
+		if event.PlayId != nil {
+			playId = *event.PlayId
+		}
+		option.Logger.WithFields(logrus.Fields{
+			"trackID":  event.TrackID,
+			"duration": event.Duration,
+			"playId":   playId,
+		}).Infof("Track ended")
+	}
 	client.OnClose = func(reason string) {
 		option.Logger.Infof("Connection closed: %s", reason)
 		option.SigChan <- true
