@@ -102,18 +102,12 @@ func NewStreamingTTSWriter(client *rustpbxgo.Client, playID string, logger *logr
 
 func (w *StreamingTTSWriter) Write(delta string, endOfStream, autoHangup bool) error {
 	// Don't send empty content unless it's specifically needed for endOfStream signaling
-	// For streaming mode, only send if there's actual content or if it's an endOfStream signal with content
-	if delta == "" && !endOfStream {
+	// For streaming mode, only send if there's actual content or if it's an endOfStream signal with conten
+	if delta == "" {
 		return nil
 	}
 
-	// For endOfStream with no content, skip the TTS call since there's nothing to say
-	if delta == "" && endOfStream {
-		w.logger.Debug("Skipping empty endOfStream TTS call in streaming mode")
-		return nil
-	}
-
-	return w.client.TTS(delta, "", w.playID, endOfStream, autoHangup, nil, nil)
+	return w.client.StreamTTS(delta, "", w.playID, endOfStream, autoHangup, nil, nil)
 }
 
 func (w *StreamingTTSWriter) GetPlayID() string {
