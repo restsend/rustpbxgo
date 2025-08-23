@@ -8,9 +8,144 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
+	"github.com/restsend/rustpbxgo"
 	"github.com/sashabaranov/go-openai"
 	"github.com/sirupsen/logrus"
 )
+
+// TTSWriter interface for writing TTS content
+type TTSWriter interface {
+	Write(delta string, endOfStream, autoHangup bool) error
+	GetPlayID() string
+}
+
+// Tools interface for handling tool calls
+type Tools interface {
+	HandleHangup(reason string) error
+	HandleRefer() error
+}
+
+// SegmentTTSWriter implements TTSWriter for segment-based TTS
+type SegmentTTSWriter struct {
+	client           *rustpbxgo.Client
+	playID           string
+	buffer           string
+	punctuationRegex *regexp.Regexp
+	logger           *logrus.Logger
+}
+
+// NewSegmentTTSWriter creates a new segment-based TTS writer
+func NewSegmentTTSWriter(client *rustpbxgo.Client, playID string, logger *logrus.Logger) *SegmentTTSWriter {
+	return &SegmentTTSWriter{
+		client:           client,
+		playID:           playID,
+		punctuationRegex: regexp.MustCompile(`([.,;:!?，。！？；：])\s*`),
+		logger:           logger,
+	}
+}
+
+func (w *SegmentTTSWriter) Write(delta string, endOfStream, autoHangup bool) error {
+	w.buffer += delta
+
+	if endOfStream {
+		err := w.client.TTS(w.buffer, "", w.playID, true, autoHangup, nil, nil)
+		w.buffer = "" // Clear buffer after sending
+		return err
+	}
+
+	// Check for punctuation in the buffer
+	matches := w.punctuationRegex.FindAllStringSubmatchIndex(w.buffer, -1)
+	if len(matches) > 0 {
+		lastIdx := 0
+		for _, match := range matches {
+			// Extract the segment up to and including the punctuation
+			segment := w.buffer[lastIdx:match[1]]
+			if segment != "" {
+				// Send this segment to TTS with endOfStream=false (not the final segment)
+				if err := w.client.TTS(segment, "", w.playID, false, false, nil, nil); err != nil {
+					w.logger.WithError(err).Error("Failed to send TTS segment")
+					return err
+				}
+			}
+			lastIdx = match[1]
+		}
+
+		// Keep the remainder in the buffer
+		if lastIdx < len(w.buffer) {
+			w.buffer = w.buffer[lastIdx:]
+		} else {
+			w.buffer = ""
+		}
+	}
+	return nil
+}
+
+func (w *SegmentTTSWriter) GetPlayID() string {
+	return w.playID
+}
+
+// StreamingTTSWriter implements TTSWriter for streaming TTS
+type StreamingTTSWriter struct {
+	client *rustpbxgo.Client
+	playID string
+	logger *logrus.Logger
+}
+
+// NewStreamingTTSWriter creates a new streaming TTS writer
+func NewStreamingTTSWriter(client *rustpbxgo.Client, playID string, logger *logrus.Logger) *StreamingTTSWriter {
+	return &StreamingTTSWriter{
+		client: client,
+		playID: playID,
+		logger: logger,
+	}
+}
+
+func (w *StreamingTTSWriter) Write(delta string, endOfStream, autoHangup bool) error {
+	// Don't send empty content unless it's specifically needed for endOfStream signaling
+	// For streaming mode, only send if there's actual content or if it's an endOfStream signal with content
+	if delta == "" && !endOfStream {
+		return nil
+	}
+
+	// For endOfStream with no content, skip the TTS call since there's nothing to say
+	if delta == "" && endOfStream {
+		w.logger.Debug("Skipping empty endOfStream TTS call in streaming mode")
+		return nil
+	}
+
+	return w.client.TTS(delta, "", w.playID, endOfStream, autoHangup, nil, nil)
+}
+
+func (w *StreamingTTSWriter) GetPlayID() string {
+	return w.playID
+}
+
+// DefaultTools implements Tools interface
+type DefaultTools struct {
+	client      *rustpbxgo.Client
+	logger      *logrus.Logger
+	referTarget string
+	referCaller string
+}
+
+func NewDefaultTools(client *rustpbxgo.Client, logger *logrus.Logger, referTarget, referCaller string) *DefaultTools {
+	return &DefaultTools{
+		client:      client,
+		logger:      logger,
+		referTarget: referTarget,
+		referCaller: referCaller,
+	}
+}
+
+func (t *DefaultTools) HandleHangup(reason string) error {
+	t.logger.WithField("reason", reason).Info("LLM requested hangup")
+	return t.client.Hangup(reason)
+}
+
+func (t *DefaultTools) HandleRefer() error {
+	t.logger.WithField("referTarget", t.referTarget).Info("LLM requested refer")
+	return t.client.Refer(t.referCaller, t.referTarget, nil)
+}
 
 // LLMHandler manages interactions with OpenAI
 type LLMHandler struct {
@@ -81,7 +216,7 @@ func NewLLMHandler(ctx context.Context, apiKey, endpoint, systemPrompt string, l
 }
 
 // QueryStream processes the LLM response as a stream and sends segments to TTS as they arrive
-func (h *LLMHandler) QueryStream(model, text string, ttsCallback func(segment string, playID string, autoHangup, shouldRefer bool) error) (string, error) {
+func (h *LLMHandler) QueryStream(model, text string, streamingTTS bool, client *rustpbxgo.Client, referCaller string) (string, error) {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
@@ -118,6 +253,17 @@ func (h *LLMHandler) QueryStream(model, text string, ttsCallback func(segment st
 	playID := fmt.Sprintf("llm-%s", uuid.New().String())
 	h.logger.WithField("playID", playID).Info("Starting LLM stream with playID")
 
+	// Create appropriate TTS writer based on streaming mode
+	var ttsWriter TTSWriter
+	if streamingTTS {
+		ttsWriter = NewStreamingTTSWriter(client, playID, h.logger)
+	} else {
+		ttsWriter = NewSegmentTTSWriter(client, playID, h.logger)
+	}
+
+	// Create tools handler
+	tools := NewDefaultTools(client, h.logger, h.ReferTarget, referCaller)
+
 	// Stream for handling responses
 	stream, err := h.client.CreateChatCompletionStream(h.ctx, request)
 	if err != nil {
@@ -125,77 +271,95 @@ func (h *LLMHandler) QueryStream(model, text string, ttsCallback func(segment st
 	}
 	defer stream.Close()
 
-	// Buffer to collect text until punctuation
-	var buffer string
 	fullResponse := ""
 	var shouldHangup bool
 	var shouldRefer bool
-	// Regular expression to detect punctuation followed by space or end of string
-	punctuationRegex := regexp.MustCompile(`([.,;:!?，。！？；：])\s*`)
+	hasTextBeforeHangup := false
 
 	// Process the stream of responses
 	for {
 		response, err := stream.Recv()
 		if err != nil {
 			if err.Error() == "EOF" {
-				// Stream closed normally
+				// Stream closed normally - send any remaining content as final segment
 				break
 			}
 			return "", fmt.Errorf("error receiving from stream: %w", err)
 		}
 
-		// Check for function calls (hangup)
+		// Check for finish reason to determine if this is the end
+		var isFinished bool
+		if len(response.Choices) > 0 && response.Choices[0].FinishReason != "" {
+			h.logger.WithField("finishReason", response.Choices[0].FinishReason).Debug("LLM stream finished")
+			isFinished = true
+		}
+
+		// Check for function calls (hangup/refer)
 		if len(response.Choices) > 0 && len(response.Choices[0].Delta.ToolCalls) > 0 {
 			for _, toolCall := range response.Choices[0].Delta.ToolCalls {
 				if toolCall.Function.Name == "hangup" {
-					h.logger.Info("LLM requested hangup")
 					shouldHangup = true
-				}
-				if toolCall.Function.Name == "refer" {
-					h.logger.WithField("referTarget", h.ReferTarget).Info("LLM requested refer")
-					// Handle refer logic here if needed
-					shouldRefer = true
-				}
-			}
-		}
-
-		// Process content if available
-		if len(response.Choices) > 0 && response.Choices[0].Delta.Content != "" {
-			content := response.Choices[0].Delta.Content
-			buffer += content
-			fullResponse += content
-
-			// Check for punctuation in the buffer
-			matches := punctuationRegex.FindAllStringSubmatchIndex(buffer, -1)
-			if len(matches) > 0 {
-				lastIdx := 0
-				for _, match := range matches {
-					// Extract the segment up to and including the punctuation
-					segment := buffer[lastIdx:match[1]]
-					if segment != "" {
-						// Send this segment to TTS with the same playId
-						if err := ttsCallback(segment, playID, false, false); err != nil {
-							h.logger.WithError(err).Error("Failed to send TTS segment")
+					// If there was text before hangup, send it with endOfStream=true and autoHangup=true
+					if hasTextBeforeHangup {
+						if err := ttsWriter.Write("", true, true); err != nil {
+							h.logger.WithError(err).Error("Failed to send final TTS before hangup")
 						}
 					}
-					lastIdx = match[1]
+					// Call tools handler directly for hangup
+					if err := tools.HandleHangup("LLM requested hangup"); err != nil {
+						h.logger.WithError(err).Error("Failed to handle hangup")
+					}
 				}
-
-				// Keep the remainder in the buffer
-				if lastIdx < len(buffer) {
-					buffer = buffer[lastIdx:]
-				} else {
-					buffer = ""
+				if toolCall.Function.Name == "refer" {
+					shouldRefer = true
+					// If there was text before refer, send it with endOfStream=true
+					if hasTextBeforeHangup {
+						if err := ttsWriter.Write("", true, false); err != nil {
+							h.logger.WithError(err).Error("Failed to send final TTS before refer")
+						}
+					}
+					// Call tools handler directly for refer
+					if err := tools.HandleRefer(); err != nil {
+						h.logger.WithError(err).Error("Failed to handle refer")
+					}
 				}
 			}
 		}
+
+		// Process content if available and not in hangup/refer mode
+		if len(response.Choices) > 0 && response.Choices[0].Delta.Content != "" && !shouldHangup && !shouldRefer {
+			content := response.Choices[0].Delta.Content
+			fullResponse += content
+			hasTextBeforeHangup = true
+
+			// If this is the final chunk (finished), send with endOfStream=true
+			if isFinished {
+				if err := ttsWriter.Write(content, true, false); err != nil {
+					h.logger.WithError(err).Error("Failed to write final TTS delta")
+				}
+			} else {
+				// Write delta to TTS writer
+				if err := ttsWriter.Write(content, false, false); err != nil {
+					h.logger.WithError(err).Error("Failed to write TTS delta")
+				}
+			}
+		}
+
+		// If stream finished, break after processing the final content
+		if isFinished {
+			break
+		}
 	}
 
-	// Send any remaining text in the buffer
-	if err := ttsCallback(buffer, playID, shouldHangup, shouldRefer); err != nil {
-		h.logger.WithError(err).Error("Failed to send final TTS segment")
+	// Send final buffered content if not already handled by tool calls or finish reason
+	if !shouldHangup && !shouldRefer && hasTextBeforeHangup {
+		// Flush any remaining buffered content as final segment
+		if err := ttsWriter.Write("", true, false); err != nil {
+			h.logger.WithError(err).Error("Failed to flush final TTS buffer")
+		}
 	}
 
+	// Update conversation history
 	if shouldHangup {
 		h.messages = append(h.messages, openai.ChatCompletionMessage{
 			Role:    openai.ChatMessageRoleAssistant,
@@ -212,80 +376,14 @@ func (h *LLMHandler) QueryStream(model, text string, ttsCallback func(segment st
 			Content: fullResponse,
 		})
 	}
+
 	h.logger.WithFields(logrus.Fields{
 		"fullResponse": fullResponse,
 		"hangup":       shouldHangup,
+		"refer":        shouldRefer,
 	}).Info("LLM stream completed")
 
 	return fullResponse, nil
-}
-
-// Query the LLM with text and get a response (non-streaming version, kept for compatibility)
-func (h *LLMHandler) Query(model, text string) (string, *HangupTool, *bool, error) {
-	h.mutex.Lock()
-	defer h.mutex.Unlock()
-
-	// Add user message to history
-	h.messages = append(h.messages, openai.ChatCompletionMessage{
-		Role:    openai.ChatMessageRoleUser,
-		Content: text,
-	})
-
-	// Construct the OpenAI request
-	if model == "" {
-		model = openai.GPT4o
-	}
-	request := openai.ChatCompletionRequest{
-		Model:       model,
-		Messages:    h.messages,
-		Temperature: 0.7,
-		Tools: []openai.Tool{
-			{
-				Type:     openai.ToolTypeFunction,
-				Function: &hangupDefinition,
-			},
-		},
-	}
-	if h.ReferTarget != "" {
-		request.Tools = append(request.Tools, openai.Tool{
-			Type:     openai.ToolTypeFunction,
-			Function: &referDefinition,
-		})
-	}
-	// Send the request to OpenAI
-	response, err := h.client.CreateChatCompletion(h.ctx, request)
-	if err != nil {
-		return "", nil, nil, fmt.Errorf("error querying OpenAI: %w", err)
-	}
-
-	// Process the response
-	message := response.Choices[0].Message
-	h.messages = append(h.messages, message)
-
-	// Check if there's a tool call for hangup
-	var hangupTool *HangupTool
-	// Check for tool calls
-	if len(message.ToolCalls) > 0 {
-		for _, toolCall := range message.ToolCalls {
-			if toolCall.Function.Name == "hangup" {
-				hangupTool = &HangupTool{}
-				// Parse the arguments
-				if err := json.Unmarshal([]byte(toolCall.Function.Arguments), hangupTool); err != nil {
-					h.logger.WithError(err).Error("Failed to parse hangup arguments")
-				} else {
-					h.logger.WithField("reason", hangupTool.Reason).Info("llm: Hangup reason")
-				}
-			}
-			if toolCall.Function.Name == "refer" {
-				h.logger.WithField("referTarget", h.ReferTarget).Info("llm: Refer requested")
-				// Handle refer logic here if needed
-				shouldRefer := true
-				return message.Content, nil, &shouldRefer, nil
-			}
-		}
-	}
-
-	return message.Content, hangupTool, nil, nil
 }
 
 // Reset clears the conversation history but keeps the system prompt

@@ -31,6 +31,8 @@ type CreateClientOption struct {
 	CallOption     rustpbxgo.CallOption
 	ReferCaller    string
 	ReferCallee    string
+	Greeting       string
+	StreamingTTS   bool
 }
 
 func createClient(ctx context.Context, option CreateClientOption, id string) *rustpbxgo.Client {
@@ -88,27 +90,7 @@ func createClient(ctx context.Context, option CreateClientOption, id string) *ru
 		}
 
 		startTime = time.Now()
-		response, err := option.LLMHandler.QueryStream(option.OpenaiModel, event.Text, func(segment string, playID string, autoHangup, shouldRefer bool) error {
-			if shouldRefer {
-				option.Logger.Infof("Refering to target: %s => %s", option.ReferCaller, option.ReferCallee)
-				return client.Refer(option.ReferCaller, option.ReferCallee, nil)
-			}
-
-			if len(segment) == 0 {
-				if autoHangup {
-					option.Logger.Infof("Auto hangup after LLM response")
-					return client.Hangup("LLM hangup")
-				}
-				return nil
-			}
-			option.Logger.WithFields(logrus.Fields{
-				"segment":    segment,
-				"playID":     playID,
-				"autoHangup": autoHangup,
-			}).Info("Sending TTS segment")
-			return client.TTS(segment, "", playID, autoHangup, nil, nil)
-		})
-
+		response, err := option.LLMHandler.QueryStream(option.OpenaiModel, event.Text, option.StreamingTTS, client, option.ReferCaller)
 		if err != nil {
 			option.Logger.Errorf("Error querying LLM stream: %v", err)
 			return
@@ -193,6 +175,7 @@ func main() {
 	var forceRefer bool = false
 	var greeting string = "Hello, how can I help you?"
 	var level = "info"
+	var streamingTTS bool = false
 	flag.StringVar(&level, "log-level", level, "Log level: debug, info, warn, error")
 	flag.StringVar(&endpoint, "endpoint", endpoint, "Endpoint to connect to")
 	flag.StringVar(&codec, "codec", codec, "Codec to use: g722, pcmu, pcma")
@@ -217,6 +200,7 @@ func main() {
 	flag.StringVar(&ttsAppID, "tts-app-id", ttsAppID, "TTS app id to use")
 	flag.StringVar(&ttsSecretID, "tts-secret-id", ttsSecretID, "TTS secret id to use")
 	flag.StringVar(&ttsSecretKey, "tts-secret-key", ttsSecretKey, "TTS secret key to use")
+	flag.BoolVar(&streamingTTS, "streaming", streamingTTS, "Use streaming TTS if supported")
 	flag.StringVar(&vadModel, "vad-model", vadModel, "VAD model to use")
 	flag.StringVar(&vadEndpoint, "vad-endpoint", vadEndpoint, "VAD endpoint to use")
 	flag.StringVar(&vadSecretKey, "vad-secret-key", vadSecretKey, "VAD secret key to use")
@@ -289,8 +273,10 @@ func main() {
 		OpenaiEndpoint: openaiEndpoint,
 		OpenaiModel:    openaiModel,
 		SystemPrompt:   systemPrompt,
+		Greeting:       greeting,
 		SigChan:        sigChan,
 		BreakOnVad:     breakOnVad,
+		StreamingTTS:   streamingTTS,
 	}
 	var recorder *rustpbxgo.RecorderOption
 	if record {
@@ -432,7 +418,7 @@ func main() {
 			return
 		}
 	} else {
-		client.TTS(greeting, "", "1", false, nil, nil)
+		client.TTS(greeting, "", "1", true, false, nil, nil)
 	}
 	<-sigChan
 	fmt.Println("Shutting down...")

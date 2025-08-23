@@ -845,7 +845,7 @@ func (c *Client) Reject(reason string) error {
 }
 
 // TTS sends a text-to-speech command
-func (c *Client) TTS(text string, speaker string, playID string, autoHangup bool, option *TTSOption, waitInputTimeout *uint32) error {
+func (c *Client) TTS(text string, speaker string, playID string, endOfStream, autoHangup bool, option *TTSOption, waitInputTimeout *uint32) error {
 	cmd := TtsCommand{
 		Command:          "tts",
 		Text:             text,
@@ -853,7 +853,7 @@ func (c *Client) TTS(text string, speaker string, playID string, autoHangup bool
 		PlayID:           playID,
 		AutoHangup:       autoHangup,
 		Streaming:        false,
-		EndOfStream:      true,
+		EndOfStream:      endOfStream,
 		Option:           option,
 		WaitInputTimeout: waitInputTimeout,
 	}
