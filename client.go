@@ -144,8 +144,9 @@ type DTMFEvent struct {
 }
 
 type TrackStartEvent struct {
-	TrackID   string `json:"trackId"`
-	Timestamp uint64 `json:"timestamp"`
+	TrackID   string  `json:"trackId"`
+	Timestamp uint64  `json:"timestamp"`
+	PlayId    *string `json:"playId,omitempty"`
 }
 
 type TrackEndEvent struct {
