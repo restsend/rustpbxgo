@@ -371,6 +371,13 @@ type TTSOption struct {
 	WaitInputTimeout uint32            `json:"waitInputTimeout,omitempty" comment:"tts wait input timeout, 5000"`
 }
 
+type MediaPassOption struct {
+	URL              string  `json:"url,omitempty"`
+	InputSampleRate  uint32  `json:"inputSampleRate"`
+	OutputSampleRate uint32  `json:"outputSampleRate"`
+	PacketSize       *uint32 `json:"packetSize,omitempty"`
+}
+
 type SipOption struct {
 	Username string            `json:"username,omitempty"`
 	Password string            `json:"password,omitempty"`
@@ -388,6 +395,7 @@ type CallOption struct {
 	VAD              *VADOption        `json:"vad,omitempty"`
 	ASR              *ASROption        `json:"asr,omitempty"`
 	TTS              *TTSOption        `json:"tts,omitempty"`
+	MediaPass        *MediaPassOption  `json:"mediaPass,omitempty"`
 	HandshakeTimeout string            `json:"handshakeTimeout,omitempty"`
 	EnableIPv6       bool              `json:"enableIpv6,omitempty"`
 	Sip              *SipOption        `json:"sip,omitempty"`
