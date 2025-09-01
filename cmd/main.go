@@ -125,14 +125,17 @@ func createClient(ctx context.Context, option CreateClientOption, id string) *ru
 		}
 	}
 	client.OnInterruption = func(event rustpbxgo.InterruptionEvent) {
-		option.Logger.Infof("OnInterruption")
-		if nil != event.Subtitle {
-			option.Logger.Infof("OnInterruption: subtitle:%s", *event.Subtitle)
+		fields := logrus.Fields{
+			"current":       event.Current,
+			"totalDuration": event.TotalDuration,
 		}
-		if nil != event.Position {
-			option.Logger.Infof("OnInterruption: position:%d", *event.Position)
+		if event.Subtitle != nil {
+			fields["subtitle"] = *event.Subtitle
 		}
-		option.Logger.Infof("OnInterruption: current: %d, totalDuration: %d", event.Current, event.TotalDuration)
+		if event.Position != nil {
+			fields["position"] = *event.Position
+		}
+		option.Logger.WithFields(fields).Info("OnInterruption")
 	}
 	return client
 }
