@@ -342,17 +342,18 @@ type VADOption struct {
 }
 
 type ASROption struct {
-	Provider   string            `json:"provider,omitempty" comment:"asr provider, tencent|aliyun"`
-	Model      string            `json:"model,omitempty"`
-	Language   string            `json:"language,omitempty"`
-	AppID      string            `json:"appId,omitempty"`
-	SecretID   string            `json:"secretId,omitempty"`
-	SecretKey  string            `json:"secretKey,omitempty"`
-	ModelType  string            `json:"modelType,omitempty"`
-	BufferSize int               `json:"bufferSize,omitempty"`
-	SampleRate uint32            `json:"sampleRate,omitempty"`
-	Endpoint   string            `json:"endpoint,omitempty"`
-	Extra      map[string]string `json:"extra,omitempty"`
+	Provider        string            `json:"provider,omitempty" comment:"asr provider, tencent|aliyun"`
+	Model           string            `json:"model,omitempty"`
+	Language        string            `json:"language,omitempty"`
+	AppID           string            `json:"appId,omitempty"`
+	SecretID        string            `json:"secretId,omitempty"`
+	SecretKey       string            `json:"secretKey,omitempty"`
+	ModelType       string            `json:"modelType,omitempty"`
+	BufferSize      int               `json:"bufferSize,omitempty"`
+	SampleRate      uint32            `json:"sampleRate,omitempty"`
+	Endpoint        string            `json:"endpoint,omitempty"`
+	Extra           map[string]string `json:"extra,omitempty"`
+	StartWhenAnswer bool              `json:"startWhenAnswer,omitempty"` // start asr when call is answered
 }
 
 type TTSOption struct {
