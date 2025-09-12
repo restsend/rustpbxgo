@@ -12,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/joho/godotenv"
 	"github.com/pion/webrtc/v3"
 	"github.com/restsend/rustpbxgo"
 	"github.com/sirupsen/logrus"
@@ -141,7 +140,6 @@ func createClient(ctx context.Context, option CreateClientOption, id string) *ru
 }
 
 func main() {
-	godotenv.Load()
 	// Parse command line flags
 	var endpoint string = "wss://rustpbx.com"
 	var codec string = "g722"
@@ -157,6 +155,9 @@ func main() {
 	var asrProvider string = "tencent"
 	var caller string = ""
 	var callee string = ""
+	var username string = ""
+	var password string = ""
+	var realm string = ""
 	var asrEndpoint string = ""
 	var asrAppID string = ""
 	var asrSecretID string = ""
@@ -194,6 +195,9 @@ func main() {
 	flag.StringVar(&speaker, "speaker", speaker, "Speaker to use")
 	flag.StringVar(&caller, "caller", caller, "Caller to use")
 	flag.StringVar(&callee, "callee", callee, "Callee to use")
+	flag.StringVar(&username, "username", username, "SIP username to use")
+	flag.StringVar(&password, "password", password, "SIP password to use")
+	flag.StringVar(&realm, "realm", realm, "SIP realm to use")
 	flag.StringVar(&asrEndpoint, "asr-endpoint", asrEndpoint, "ASR endpoint to use")
 	flag.StringVar(&asrModelType, "asr-model-type", asrModelType, "ASR model type to use")
 	flag.StringVar(&asrAppID, "asr-app-id", asrAppID, "ASR app id to use")
@@ -329,22 +333,15 @@ func main() {
 		}
 	}
 	if callWithSip {
-		if caller == "" {
-			caller = os.Getenv("SIP_CALLER")
-		}
-		if callee == "" {
-			callee = os.Getenv("SIP_CALLEE")
-		}
-
 		callOption.Caller = caller
 		callOption.Callee = callee
 		if callOption.Caller == "" || callOption.Callee == "" {
 			logger.Fatalf("caller and callee must be set")
 		}
 		sipOption := rustpbxgo.SipOption{
-			Username: os.Getenv("SIP_USERNAME"),
-			Password: os.Getenv("SIP_PASSWORD"),
-			Realm:    os.Getenv("SIP_DOMAIN"),
+			Username: username,
+			Password: password,
+			Realm:    realm,
 		}
 		callOption.Sip = &sipOption
 	}

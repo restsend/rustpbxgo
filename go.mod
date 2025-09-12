@@ -5,7 +5,6 @@ go 1.23.0
 require (
 	github.com/gen2brain/malgo v0.11.23
 	github.com/gorilla/websocket v1.5.3
-	github.com/joho/godotenv v1.5.1
 	github.com/pion/webrtc/v3 v3.3.5
 	github.com/sashabaranov/go-openai v1.38.1
 	github.com/shenjinti/go711 v0.0.0-20241003044859-031301957637
