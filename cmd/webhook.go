@@ -9,8 +9,8 @@ import (
 )
 
 type IncomingCall struct {
-	DialogID  string `json:"dialogId"`
-	CreatedAt string `json:"createdAt"`
+	DialogID  string `json:"dialog_id"`
+	CreatedAt string `json:"created_at"`
 	Caller    string `json:"caller"`
 	Callee    string `json:"callee"`
 	Event     string `json:"event"`
