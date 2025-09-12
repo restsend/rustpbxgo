@@ -34,8 +34,6 @@ func serveWebhook(parent context.Context, option CreateClientOption, addr, prefi
 		}).Info("Incoming call")
 
 		client := createClient(parent, option, form.DialogID)
-		option.CallOption.Caller = form.Caller
-		option.CallOption.Callee = form.Callee
 
 		go func() {
 			ctx, cancel := context.WithCancel(parent)
