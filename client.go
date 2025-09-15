@@ -245,8 +245,9 @@ type AcceptCommand struct {
 
 // RingingCommand sends a ringing command to the server
 type RingingCommand struct {
-	Command  string `json:"command"`
-	Ringtone string `json:"ringtone,omitempty"`
+	Command  string          `json:"command"`
+	Ringtone string          `json:"ringtone,omitempty"`
+	Recorder *RecorderOption `json:"recorder,omitempty"`
 }
 
 // RejectCommand rejects an incoming call
@@ -820,10 +821,11 @@ func (c *Client) Invite(ctx context.Context, option CallOption) (*AnswerEvent, e
 }
 
 // Ringing sends a ringing command to the server
-func (c *Client) Ringing(ringtone string) error {
+func (c *Client) Ringing(ringtone string, recorder *RecorderOption) error {
 	cmd := RingingCommand{
 		Command:  "ringing",
 		Ringtone: ringtone,
+		Recorder: recorder,
 	}
 	return c.sendCommand(cmd)
 }

@@ -28,6 +28,7 @@ type CreateClientOption struct {
 	SystemPrompt   string
 	BreakOnVad     bool
 	CallOption     rustpbxgo.CallOption
+	Ringtone       string
 	ReferCaller    string
 	ReferCallee    string
 	Greeting       string
@@ -180,6 +181,7 @@ func main() {
 	var greeting string = "Hello, how can I help you?"
 	var level = "info"
 	var streamingTTS bool = false
+	var ringtone string = ""
 	flag.StringVar(&level, "log-level", level, "Log level: debug, info, warn, error")
 	flag.StringVar(&endpoint, "endpoint", endpoint, "Endpoint to connect to")
 	flag.StringVar(&codec, "codec", codec, "Codec to use: g722, pcmu, pcma")
@@ -219,6 +221,7 @@ func main() {
 	flag.StringVar(&referCallee, "refer", referCallee, "Refer callee for SIP REFER")
 	flag.BoolVar(&forceRefer, "force-refer", forceRefer, "Force refer to callee")
 	flag.StringVar(&greeting, "greeting", greeting, "Initial greeting message")
+	flag.StringVar(&ringtone, "ringtone", ringtone, "Ringtone file to play when ringing")
 
 	flag.Parse()
 	u, err := url.Parse(endpoint)
@@ -345,6 +348,7 @@ func main() {
 		}
 		callOption.Sip = &sipOption
 	}
+	option.Ringtone = ringtone
 	option.CallOption = callOption
 	option.ReferCallee = referCallee
 	option.ReferCaller = caller

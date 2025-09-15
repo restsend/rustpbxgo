@@ -26,11 +26,12 @@ func serveWebhook(parent context.Context, option CreateClientOption, addr, prefi
 			return
 		}
 		option.Logger.WithFields(logrus.Fields{
-			"dialogId":  form.DialogID,
-			"createdAt": form.CreatedAt,
-			"caller":    form.Caller,
-			"callee":    form.Callee,
-			"event":     form.Event,
+			"dialogId":   form.DialogID,
+			"createdAt":  form.CreatedAt,
+			"caller":     form.Caller,
+			"callee":     form.Callee,
+			"event":      form.Event,
+			"callOption": option.CallOption,
 		}).Info("Incoming call")
 
 		client := createClient(parent, option, form.DialogID)
@@ -43,6 +44,12 @@ func serveWebhook(parent context.Context, option CreateClientOption, addr, prefi
 				option.Logger.Errorf("Failed to connect to server: %v", err)
 			}
 			defer client.Shutdown()
+
+			if option.Ringtone != "" {
+				client.Ringing(option.Ringtone, option.CallOption.Recorder)
+				time.Sleep(5000 * time.Millisecond) // Ring for 5 seconds
+			}
+
 			client.Accept(option.CallOption)
 			time.Sleep(300 * time.Millisecond)
 			client.TTS(option.Greeting, "", "", true, false, nil, nil)
