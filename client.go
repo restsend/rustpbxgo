@@ -324,7 +324,9 @@ type HistoryCommand struct {
 }
 
 type RecorderOption struct {
-	Samplerate int `json:"samplerate,omitempty"`
+	RecorderFile string `json:"recorderFile,omitempty"`
+	Samplerate   int    `json:"samplerate,omitempty"`
+	Ptime        int    `json:"ptime,omitempty"`
 }
 
 type VADOption struct {
