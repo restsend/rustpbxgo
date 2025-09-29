@@ -81,7 +81,7 @@ func createClient(ctx context.Context, option CreateClientOption, id string) *ru
 			client.History("user", event.Text)
 		}
 
-		client.Interrupt()
+		client.Interrupt(true)
 		startTime := time.UnixMilli(int64(*event.StartTime))
 		endTime := time.UnixMilli(int64(*event.EndTime))
 		option.Logger.Infof("ASR Final: %s startTime: %s endTime: %s", event.Text, startTime.String(), endTime.String())
@@ -110,7 +110,7 @@ func createClient(ctx context.Context, option CreateClientOption, id string) *ru
 		if option.BreakOnVad {
 			return
 		}
-		if err := client.Interrupt(); err != nil {
+		if err := client.Interrupt(true); err != nil {
 			option.Logger.Warnf("Failed to interrupt TTS: %v", err)
 		}
 	}
@@ -120,7 +120,7 @@ func createClient(ctx context.Context, option CreateClientOption, id string) *ru
 			return
 		}
 		option.Logger.Infof("Interrupting TTS")
-		if err := client.Interrupt(); err != nil {
+		if err := client.Interrupt(true); err != nil {
 			option.Logger.Warnf("Failed to interrupt TTS: %v", err)
 		}
 	}
@@ -321,12 +321,13 @@ func main() {
 		VAD:      vadOption,
 		ASR:      asrOption,
 		TTS: &rustpbxgo.TTSOption{
-			Provider:  ttsProvider,
-			Speaker:   speaker,
-			Endpoint:  ttsEndpoint,
-			AppID:     ttsAppID,
-			SecretID:  ttsSecretID,
-			SecretKey: ttsSecretKey,
+			Provider:           ttsProvider,
+			Speaker:            speaker,
+			Endpoint:           ttsEndpoint,
+			AppID:              ttsAppID,
+			SecretID:           ttsSecretID,
+			SecretKey:          ttsSecretKey,
+			MaxConcurrentTasks: 3,
 		},
 	}
 	if eouType != "" {
@@ -422,7 +423,7 @@ func main() {
 			return
 		}
 	} else {
-		client.TTS(greeting, "", "1", true, false, nil, nil)
+		client.TTS(greeting, "", "1", true, false, nil, nil, false)
 	}
 	<-sigChan
 	fmt.Println("Shutting down...")

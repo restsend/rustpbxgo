@@ -52,7 +52,7 @@ func serveWebhook(parent context.Context, option CreateClientOption, addr, prefi
 
 			client.Accept(option.CallOption)
 			time.Sleep(300 * time.Millisecond)
-			client.TTS(option.Greeting, "", "", true, false, nil, nil)
+			client.TTS(option.Greeting, "", "", true, false, nil, nil, false)
 			<-ctx.Done()
 		}()
 
