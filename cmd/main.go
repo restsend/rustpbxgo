@@ -149,7 +149,7 @@ func main() {
 	var openaiEndpoint string = ""
 	var systemPrompt string = "You are a helpful assistant. Provide concise responses. Use 'hangup' tool when the conversation is complete."
 	var breakOnVad bool = false
-	var speaker string = "601003"
+	var speaker string = ""
 	var callWithSip bool = false
 	var record bool = false
 	var ttsProvider string = "tencent"
