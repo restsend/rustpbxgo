@@ -48,7 +48,7 @@ func (w *SegmentTTSWriter) Write(delta string, endOfStream, autoHangup bool) err
 	w.buffer += delta
 
 	if endOfStream {
-		err := w.client.TTS(w.buffer, "", w.playID, true, autoHangup, nil, nil)
+		err := w.client.TTS(w.buffer, "", w.playID, true, autoHangup, nil, nil, false)
 		w.buffer = "" // Clear buffer after sending
 		return err
 	}
@@ -62,7 +62,7 @@ func (w *SegmentTTSWriter) Write(delta string, endOfStream, autoHangup bool) err
 			segment := w.buffer[lastIdx:match[1]]
 			if segment != "" {
 				// Send this segment to TTS with endOfStream=false (not the final segment)
-				if err := w.client.TTS(segment, "", w.playID, false, false, nil, nil); err != nil {
+				if err := w.client.TTS(segment, "", w.playID, false, false, nil, nil, false); err != nil {
 					w.logger.WithError(err).Error("Failed to send TTS segment")
 					return err
 				}
@@ -107,7 +107,7 @@ func (w *StreamingTTSWriter) Write(delta string, endOfStream, autoHangup bool) e
 		return nil
 	}
 
-	return w.client.StreamTTS(delta, "", w.playID, endOfStream, autoHangup, nil, nil)
+	return w.client.StreamTTS(delta, "", w.playID, endOfStream, autoHangup, nil, nil, false)
 }
 
 func (w *StreamingTTSWriter) GetPlayID() string {
