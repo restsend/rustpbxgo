@@ -401,6 +401,14 @@ type CallOption struct {
 	Sip              *SipOption        `json:"sip,omitempty"`
 	Extra            map[string]string `json:"extra,omitempty"`
 	Eou              *EouOption        `json:"eou,omitempty"`
+	MediaPass        *MediaPassOption  `json:"mediaPass,omitempty"`
+}
+
+type MediaPassOption struct {
+	URL              string `json:"url"`
+	InputSampleRate  int    `json:"inputSampleRate"`
+	OutputSampleRate int    `json:"outputSampleRate"`
+	PacketSize       int    `json:"packetSize,omitempty"`
 }
 
 type EouOption struct {
