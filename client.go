@@ -33,6 +33,7 @@ type OnMetrics func(event MetricsEvent)
 type OnError func(event ErrorEvent)
 type OnClose func(reason string)
 type OnAddHistory func(event AddHistoryEvent)
+type OnEou func(event EouEvent)
 type OnOther func(event OtherEvent)
 
 type Client struct {
@@ -66,6 +67,7 @@ type Client struct {
 	OnMetrics                OnMetrics
 	OnError                  OnError
 	OnAddHistory             OnAddHistory
+	OnEou                    OnEou
 	OnOther                  OnOther
 }
 
@@ -746,6 +748,15 @@ func (c *Client) processEvent(message []byte) {
 		}
 		if c.OnAddHistory != nil {
 			c.OnAddHistory(event)
+		}
+	case "eou":
+		var event EouEvent
+		if err := json.Unmarshal(message, &event); err != nil {
+			c.logger.Errorf("Error unmarshalling eou event: %v", err)
+			return
+		}
+		if c.OnEou != nil {
+			c.OnEou(event)
 		}
 	case "other":
 		var event OtherEvent
