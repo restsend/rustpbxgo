@@ -297,6 +297,8 @@ func (h *LLMHandler) QueryStream(model, text string, streamingTTS bool, client *
 					if hasTextBeforeHangup {
 						if err := ttsWriter.Write("", true, true); err != nil {
 							h.logger.WithError(err).Error("Failed to send final TTS before hangup")
+						} else {
+							continue
 						}
 					}
 					// Call tools handler directly for hangup
