@@ -35,6 +35,7 @@ type OnClose func(reason string)
 type OnAddHistory func(event AddHistoryEvent)
 type OnEou func(event EouEvent)
 type OnOther func(event OtherEvent)
+type OnPing func(event PingEvent)
 
 type Client struct {
 	ctx                      context.Context
@@ -69,6 +70,7 @@ type Client struct {
 	OnAddHistory             OnAddHistory
 	OnEou                    OnEou
 	OnOther                  OnOther
+	OnPing                   OnPing
 }
 
 type event struct {
@@ -228,6 +230,11 @@ type OtherEvent struct {
 	Extra     map[string]string `json:"extra,omitempty"`
 }
 
+type PingEvent struct {
+	Timestamp uint64 `json:"timestamp"`
+	Payload   string `json:"payload,omitempty"`
+}
+
 // Command represents WebSocket commands to be sent to the server
 type Command struct {
 	Command string `json:"command"`
@@ -326,6 +333,10 @@ type HistoryCommand struct {
 	Command string `json:"command"`
 	Speaker string `json:"speaker"`
 	Text    string `json:"text"`
+}
+
+type InterruptionCommand struct {
+	Command string `json:"command"`
 }
 
 type RecorderOption struct {
@@ -757,6 +768,15 @@ func (c *Client) processEvent(message []byte) {
 		}
 		if c.OnEou != nil {
 			c.OnEou(event)
+		}
+	case "ping":
+		var event PingEvent
+		if err := json.Unmarshal(message, &event); err != nil {
+			c.logger.Errorf("Error unmarshalling ping event: %v", err)
+			return
+		}
+		if c.OnPing != nil {
+			c.OnPing(event)
 		}
 	case "other":
 		var event OtherEvent
