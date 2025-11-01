@@ -53,6 +53,11 @@ func serveWebhook(parent context.Context, option CreateClientOption, addr, prefi
 			client.Accept(option.CallOption)
 			time.Sleep(300 * time.Millisecond)
 			client.TTS(option.Greeting, "", "", true, false, nil, nil, false)
+			if option.MaxCallTime > 0 {
+				time.Sleep(time.Duration(option.MaxCallTime) * time.Second)
+				option.Logger.Infof("Max call time reached, hanging up...")
+				client.Hangup("max call time reached")
+			}
 			<-ctx.Done()
 		}()
 

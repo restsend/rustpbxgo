@@ -33,6 +33,7 @@ type CreateClientOption struct {
 	ReferCallee    string
 	Greeting       string
 	StreamingTTS   bool
+	MaxCallTime    uint
 }
 
 func createClient(ctx context.Context, option CreateClientOption, id string) *rustpbxgo.Client {
@@ -182,6 +183,7 @@ func main() {
 	var level = "info"
 	var streamingTTS bool = false
 	var ringtone string = ""
+	var maxCallTime uint = 0
 	flag.StringVar(&level, "log-level", level, "Log level: debug, info, warn, error")
 	flag.StringVar(&endpoint, "endpoint", endpoint, "Endpoint to connect to")
 	flag.StringVar(&codec, "codec", codec, "Codec to use: g722, pcmu, pcma")
@@ -222,6 +224,7 @@ func main() {
 	flag.BoolVar(&forceRefer, "force-refer", forceRefer, "Force refer to callee")
 	flag.StringVar(&greeting, "greeting", greeting, "Initial greeting message")
 	flag.StringVar(&ringtone, "ringtone", ringtone, "Ringtone file to play when ringing")
+	flag.UintVar(&maxCallTime, "max-call-time", maxCallTime, "Maximum call time in seconds (0 for unlimited)")
 
 	flag.Parse()
 	u, err := url.Parse(endpoint)
@@ -353,7 +356,7 @@ func main() {
 	option.CallOption = callOption
 	option.ReferCallee = referCallee
 	option.ReferCaller = caller
-
+	option.MaxCallTime = maxCallTime
 	if webhookAddr != "" {
 		serveWebhook(ctx, option, webhookAddr, webhookPrefix)
 		return
@@ -425,6 +428,13 @@ func main() {
 	} else {
 		client.TTS(greeting, "", "1", true, false, nil, nil, false)
 	}
+
+	if maxCallTime > 0 {
+		time.Sleep(time.Duration(maxCallTime) * time.Second)
+		logger.Infof("Max call time reached, hanging up...")
+		client.Hangup("max call time reached")
+	}
+	// Wait for signal to shutdown
 	<-sigChan
 	fmt.Println("Shutting down...")
 }
