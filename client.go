@@ -426,11 +426,12 @@ type MediaPassOption struct {
 }
 
 type EouOption struct {
-	Type      string `json:"type,omitempty"`
-	Endpoint  string `json:"endpoint,omitempty"`
-	SecretKey string `json:"secretKey,omitempty"`
-	SecretID  string `json:"secretId,omitempty"`
-	Timeout   uint32 `json:"timeout,omitempty"`
+	Type      string            `json:"type,omitempty"`
+	Endpoint  string            `json:"endpoint,omitempty"`
+	SecretKey string            `json:"secretKey,omitempty"`
+	SecretID  string            `json:"secretId,omitempty"`
+	Timeout   uint32            `json:"timeout,omitempty"`
+	Extra     map[string]string `json:"extra,omitempty"`
 }
 
 // ReferOption represents options for refer command
