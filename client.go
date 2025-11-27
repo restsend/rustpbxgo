@@ -285,6 +285,7 @@ type TtsCommand struct {
 type PlayCommand struct {
 	Command          string  `json:"command"`
 	URL              string  `json:"url"`
+	PlayID           string  `json:"playId,omitempty"`
 	AutoHangup       bool    `json:"autoHangup,omitempty"`
 	WaitInputTimeout *uint32 `json:"waitInputTimeout,omitempty" comment:"tts wait input timeout, 5000"`
 }
@@ -928,10 +929,11 @@ func (c *Client) StreamTTS(text string, speaker string, playID string, endOfStre
 }
 
 // Play sends a command to play audio from a URL
-func (c *Client) Play(url string, autoHangup bool, waitInputTimeout *uint32) error {
+func (c *Client) Play(url string, playID string, autoHangup bool, waitInputTimeout *uint32) error {
 	cmd := PlayCommand{
 		Command:          "play",
 		URL:              url,
+		PlayID:           playID,
 		AutoHangup:       autoHangup,
 		WaitInputTimeout: waitInputTimeout,
 	}
