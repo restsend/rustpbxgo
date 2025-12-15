@@ -347,7 +347,7 @@ type RecorderOption struct {
 }
 
 type VADOption struct {
-	Type                  string  `json:"type,omitempty" comment:"vad type, silero|webrtc"`
+	Type                  string  `json:"type,omitempty" comment:"vad type, silero|ten"`
 	Samplerate            uint32  `json:"samplerate,omitempty" comment:"vad samplerate, 16000|48000"`
 	SpeechPadding         uint64  `json:"speechPadding,omitempty" comment:"vad speech padding, 120"`
 	SilencePadding        uint64  `json:"silencePadding,omitempty" comment:"vad silence padding, 200"`
