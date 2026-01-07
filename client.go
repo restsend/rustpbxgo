@@ -408,20 +408,21 @@ type SipOption struct {
 
 // CallOption represents options for invite/answer commands
 type CallOption struct {
-	Denoise          bool              `json:"denoise,omitempty"`
-	Offer            string            `json:"offer,omitempty"`
-	Callee           string            `json:"callee,omitempty"`
-	Caller           string            `json:"caller,omitempty"`
-	Recorder         *RecorderOption   `json:"recorder,omitempty"`
-	VAD              *VADOption        `json:"vad,omitempty"`
-	ASR              *ASROption        `json:"asr,omitempty"`
-	TTS              *TTSOption        `json:"tts,omitempty"`
-	HandshakeTimeout string            `json:"handshakeTimeout,omitempty"`
-	EnableIPv6       bool              `json:"enableIpv6,omitempty"`
-	Sip              *SipOption        `json:"sip,omitempty"`
-	Extra            map[string]string `json:"extra,omitempty"`
-	Eou              *EouOption        `json:"eou,omitempty"`
-	MediaPass        *MediaPassOption  `json:"mediaPass,omitempty"`
+	Denoise           bool              `json:"denoise,omitempty"`
+	Offer             string            `json:"offer,omitempty"`
+	Callee            string            `json:"callee,omitempty"`
+	Caller            string            `json:"caller,omitempty"`
+	Recorder          *RecorderOption   `json:"recorder,omitempty"`
+	VAD               *VADOption        `json:"vad,omitempty"`
+	ASR               *ASROption        `json:"asr,omitempty"`
+	TTS               *TTSOption        `json:"tts,omitempty"`
+	HandshakeTimeout  int               `json:"handshakeTimeout,omitempty"`
+	InactivityTimeout int               `json:"inactivityTimeout,omitempty"` // in seconds
+	EnableIPv6        bool              `json:"enableIpv6,omitempty"`
+	Sip               *SipOption        `json:"sip,omitempty"`
+	Extra             map[string]string `json:"extra,omitempty"`
+	Eou               *EouOption        `json:"eou,omitempty"`
+	MediaPass         *MediaPassOption  `json:"mediaPass,omitempty"`
 }
 
 type MediaPassOption struct {
