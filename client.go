@@ -182,6 +182,7 @@ type AsrFinalEvent struct {
 	StartTime *uint64 `json:"startTime,omitempty"`
 	EndTime   *uint64 `json:"endTime,omitempty"`
 	Text      string  `json:"text"`
+	TaskID    *string `json:"taskId,omitempty"`
 }
 
 type AsrDeltaEvent struct {
@@ -191,6 +192,7 @@ type AsrDeltaEvent struct {
 	StartTime *uint64 `json:"startTime,omitempty"`
 	EndTime   *uint64 `json:"endTime,omitempty"`
 	Text      string  `json:"text"`
+	TaskID    *string `json:"taskId,omitempty"`
 }
 
 type LLMFinalEvent struct {
