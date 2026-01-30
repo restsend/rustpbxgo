@@ -220,9 +220,10 @@ type ErrorEvent struct {
 	Code      *uint32 `json:"code,omitempty"`
 }
 type EouEvent struct {
-	TrackID   string `json:"trackId"`
-	Timestamp uint64 `json:"timestamp"`
-	Complete  bool   `json:"complete"`
+	TrackID        string `json:"trackId"`
+	Timestamp      uint64 `json:"timestamp"`
+	Complete       bool   `json:"complete"`
+	InterruptPoint string `json:"interruptPoint,omitempty"`
 }
 type AddHistoryEvent struct {
 	Sender    string `json:"sender"`
