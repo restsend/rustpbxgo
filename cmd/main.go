@@ -70,6 +70,9 @@ func createClient(ctx context.Context, option CreateClientOption, id string) *ru
 	client.OnDTMF = func(event rustpbxgo.DTMFEvent) {
 		option.Logger.Infof("DTMF: %s", event.Digit)
 	}
+	client.OnBinary = func(trackIdx int, data []byte) {
+		option.Logger.Debugf("Binary: trackIdx=%d data len=%d", trackIdx, len(data))
+	}
 	client.OnRinging = func(event rustpbxgo.RingingEvent) {
 		option.Logger.WithFields(logrus.Fields{
 			"id":         event.TrackID,
@@ -184,6 +187,7 @@ func main() {
 	var streamingTTS bool = false
 	var ringtone string = ""
 	var maxCallTime uint = 0
+	var subscribe bool = false
 	flag.StringVar(&level, "log-level", level, "Log level: debug, info, warn, error")
 	flag.StringVar(&endpoint, "endpoint", endpoint, "Endpoint to connect to")
 	flag.StringVar(&codec, "codec", codec, "Codec to use: g722, pcmu, pcma")
@@ -225,6 +229,7 @@ func main() {
 	flag.StringVar(&greeting, "greeting", greeting, "Initial greeting message")
 	flag.StringVar(&ringtone, "ringtone", ringtone, "Ringtone file to play when ringing")
 	flag.UintVar(&maxCallTime, "max-call-time", maxCallTime, "Maximum call time in seconds (0 for unlimited)")
+	flag.BoolVar(&subscribe, "subscribe", subscribe, "Subscribe to real-time audio")
 
 	flag.Parse()
 	u, err := url.Parse(endpoint)
@@ -339,6 +344,7 @@ func main() {
 			Endpoint: eouEndpoint,
 		}
 	}
+	callOption.Subscribe = subscribe
 	if callWithSip {
 		callOption.Caller = caller
 		callOption.Callee = callee

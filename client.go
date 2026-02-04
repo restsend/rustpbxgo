@@ -36,6 +36,7 @@ type OnAddHistory func(event AddHistoryEvent)
 type OnEou func(event EouEvent)
 type OnOther func(event OtherEvent)
 type OnPing func(event PingEvent)
+type OnBinary func(trackIdx int, data []byte)
 
 type Client struct {
 	ctx                      context.Context
@@ -71,6 +72,7 @@ type Client struct {
 	OnEou                    OnEou
 	OnOther                  OnOther
 	OnPing                   OnPing
+	OnBinary                 OnBinary
 }
 
 type event struct {
@@ -426,6 +428,7 @@ type CallOption struct {
 	Extra             map[string]string `json:"extra,omitempty"`
 	Eou               *EouOption        `json:"eou,omitempty"`
 	MediaPass         *MediaPassOption  `json:"mediaPass,omitempty"`
+	Subscribe         bool              `json:"subscribe,omitempty"`
 }
 
 type MediaPassOption struct {
@@ -529,6 +532,18 @@ func (c *Client) Connect(callType string) error {
 					c.OnClose(err.Error())
 				}
 				return
+			}
+			if mt == websocket.BinaryMessage {
+				if c.OnBinary != nil {
+					data := make([]byte, len(message))
+					copy(data, message)
+					go func() {
+						if len(data) > 0 {
+							c.OnBinary(int(data[0]), data[1:])
+						}
+					}()
+				}
+				continue
 			}
 			if mt != websocket.TextMessage {
 				c.logger.Debugf("Received non-text message: %v", mt)
