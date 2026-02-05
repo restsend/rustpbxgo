@@ -494,6 +494,9 @@ func WithDumpEvents(dump bool) ClientOption {
 }
 
 func (c *Client) Connect(callType string) error {
+	if c.conn != nil {
+		return errors.New("client already connected")
+	}
 	if c.cancel == nil {
 		c.ctx, c.cancel = context.WithCancel(context.Background())
 	}
@@ -516,12 +519,16 @@ func (c *Client) Connect(callType string) error {
 		return err
 	}
 
-	c.eventChan = make(chan []byte, 8)
-	c.cmdChan = make(chan any, 8)
+	chanSize := 128
+	c.eventChan = make(chan []byte, chanSize)
+	c.cmdChan = make(chan any, chanSize)
+
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				c.logger.Errorf("Panic in WebSocket read loop: %v", r)
+				var buf [4096]byte
+				runtime.Stack(buf[:], false)
+				c.logger.Errorf("Panic in WebSocket read loop:%v \n%s", r, string(buf[:]))
 			}
 		}()
 		for {
@@ -562,15 +569,17 @@ func (c *Client) Connect(callType string) error {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				c.logger.Errorf("Panic in event processing loop: %v", r)
+				var buf [4096]byte
+				runtime.Stack(buf[:], false)
+				c.logger.Errorf("Panic in event processing loop: %v \n%s", r, string(buf[:]))
 			}
+			close(c.eventChan)
+			c.conn.Close()
 		}()
 
 		for {
 			select {
 			case <-c.ctx.Done():
-				close(c.eventChan)
-				c.conn.Close()
 				c.logger.Info("Context cancelled, shutting down event processing")
 				return
 			case cmd, ok := <-c.cmdChan:
