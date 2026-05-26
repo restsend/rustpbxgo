@@ -487,7 +487,7 @@ type ReferOption struct {
 }
 type RingbackDetectionOption struct {
 	Enabled bool `json:"enabled,omitempty"`
-	/// Minimum audio accumulation (seconds) before first inference
+	/// Minimum audio accumulation (seconds) before first inference, minimum value is 4.0 second, default is 6.0 seconds
 	MinBufferSecs float32 `json:"minBufferSecs,omitempty"`
 	/// Seconds between consecutive inferences
 	DetectionIntervalSecs float32 `json:"detectionIntervalSecs,omitempty"`
