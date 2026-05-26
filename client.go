@@ -37,6 +37,8 @@ type OnEou func(event EouEvent)
 type OnOther func(event OtherEvent)
 type OnPing func(event PingEvent)
 type OnBinary func(trackIdx int, data []byte)
+type OnCustom func(event CustomEvent)
+type OnRingbackState func(event RingbackStateEvent)
 
 type Client struct {
 	ctx                      context.Context
@@ -71,6 +73,8 @@ type Client struct {
 	OnAddHistory             OnAddHistory
 	OnEou                    OnEou
 	OnOther                  OnOther
+	OnCustom                 OnCustom
+	OnRingbackState          OnRingbackState
 	OnPing                   OnPing
 	OnBinary                 OnBinary
 }
@@ -239,6 +243,30 @@ type OtherEvent struct {
 	Timestamp uint64            `json:"timestamp"`
 	Sender    string            `json:"sender"`
 	Extra     map[string]string `json:"extra,omitempty"`
+}
+
+type BinaryEvent struct {
+	TrackID   string `json:"trackId"`
+	Timestamp uint64 `json:"timestamp"`
+	Data      []byte `json:"data"`
+}
+
+type CustomEvent struct {
+	TrackID   string            `json:"trackId"`
+	Timestamp uint64            `json:"timestamp"`
+	Event     string            `json:"event"`
+	Extra     map[string]string `json:"extra,omitempty"`
+}
+
+type RingbackStateEvent struct {
+	TrackID        string   `json:"trackId"`
+	Timestamp      uint64   `json:"timestamp"`
+	State          string   `json:"state"`                    /// Current line state: "ringing", "human_voice", "busy_tone", "silence", etc.
+	StateIndex     uint32   `json:"stateIndex"`               /// Class index from the TelcoClassifier (3=ringing, 9=human_voice, ...)
+	Confidence     float32  `json:"confidence"`               /// Confidence of the prediction
+	PrevState      *string  `json:"prevState,omitempty"`      /// Previous state (None on first detection)
+	PrevConfidence *float32 `json:"prevConfidence,omitempty"` /// Confidence of the previous state
+	Refer          bool     `json:"refer"`                    /// Whether the call is referred
 }
 
 type PingEvent struct {
@@ -822,6 +850,24 @@ func (c *Client) processEvent(message []byte) {
 		}
 		if c.OnOther != nil {
 			c.OnOther(event)
+		}
+	case "custom":
+		var event CustomEvent
+		if err := json.Unmarshal(message, &event); err != nil {
+			c.logger.Errorf("Error unmarshalling custom event: %v", err)
+			return
+		}
+		if c.OnCustom != nil {
+			c.OnCustom(event)
+		}
+	case "ringbackState":
+		var event RingbackStateEvent
+		if err := json.Unmarshal(message, &event); err != nil {
+			c.logger.Errorf("Error unmarshalling ringbackState event: %v", err)
+			return
+		}
+		if c.OnRingbackState != nil {
+			c.OnRingbackState(event)
 		}
 	default:
 		c.logger.Debugf("Unhandled event type: %s", ev.Event)
