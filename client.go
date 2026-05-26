@@ -441,22 +441,23 @@ type SipOption struct {
 
 // CallOption represents options for invite/answer commands
 type CallOption struct {
-	Denoise           bool              `json:"denoise,omitempty"`
-	Offer             string            `json:"offer,omitempty"`
-	Callee            string            `json:"callee,omitempty"`
-	Caller            string            `json:"caller,omitempty"`
-	Recorder          *RecorderOption   `json:"recorder,omitempty"`
-	VAD               *VADOption        `json:"vad,omitempty"`
-	ASR               *ASROption        `json:"asr,omitempty"`
-	TTS               *TTSOption        `json:"tts,omitempty"`
-	HandshakeTimeout  int               `json:"handshakeTimeout,omitempty"`
-	InactivityTimeout int               `json:"inactivityTimeout,omitempty"` // in seconds
-	EnableIPv6        bool              `json:"enableIpv6,omitempty"`
-	Sip               *SipOption        `json:"sip,omitempty"`
-	Extra             map[string]string `json:"extra,omitempty"`
-	Eou               *EouOption        `json:"eou,omitempty"`
-	MediaPass         *MediaPassOption  `json:"mediaPass,omitempty"`
-	Subscribe         bool              `json:"subscribe,omitempty"`
+	Denoise           bool                     `json:"denoise,omitempty"`
+	Offer             string                   `json:"offer,omitempty"`
+	Callee            string                   `json:"callee,omitempty"`
+	Caller            string                   `json:"caller,omitempty"`
+	Recorder          *RecorderOption          `json:"recorder,omitempty"`
+	VAD               *VADOption               `json:"vad,omitempty"`
+	ASR               *ASROption               `json:"asr,omitempty"`
+	TTS               *TTSOption               `json:"tts,omitempty"`
+	HandshakeTimeout  int                      `json:"handshakeTimeout,omitempty"`
+	InactivityTimeout int                      `json:"inactivityTimeout,omitempty"` // in seconds
+	EnableIPv6        bool                     `json:"enableIpv6,omitempty"`
+	Sip               *SipOption               `json:"sip,omitempty"`
+	Extra             map[string]string        `json:"extra,omitempty"`
+	Eou               *EouOption               `json:"eou,omitempty"`
+	MediaPass         *MediaPassOption         `json:"mediaPass,omitempty"`
+	Subscribe         bool                     `json:"subscribe,omitempty"`
+	RingbackDetection *RingbackDetectionOption `json:"ringbackDetection,omitempty"`
 }
 
 type MediaPassOption struct {
@@ -484,7 +485,17 @@ type ReferOption struct {
 	Sip         *SipOption `json:"sip,omitempty"`
 	ASR         *ASROption `json:"asr,omitempty"`
 }
-
+type RingbackDetectionOption struct {
+	Enabled bool `json:"enabled,omitempty"`
+	/// Minimum audio accumulation (seconds) before first inference
+	MinBufferSecs float32 `json:"minBufferSecs,omitempty"`
+	/// Seconds between consecutive inferences
+	DetectionIntervalSecs float32 `json:"detectionIntervalSecs,omitempty"`
+	/// Confidence threshold for reporting a state
+	ConfidenceThreshold float32 `json:"confidenceThreshold,omitempty"`
+	/// Only emit events on state change (ringing→human_voice etc.)
+	OnStateChangeOnly bool `json:"onStateChangeOnly,omitempty"`
+}
 type ClientOption func(*Client)
 
 func NewClient(endpoint string, opts ...ClientOption) *Client {
