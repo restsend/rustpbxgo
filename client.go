@@ -267,6 +267,7 @@ type RingbackStateEvent struct {
 	PrevState      *string  `json:"prevState,omitempty"`      /// Previous state (None on first detection)
 	PrevConfidence *float32 `json:"prevConfidence,omitempty"` /// Confidence of the previous state
 	Refer          bool     `json:"refer"`                    /// Whether the call is referred
+	IsFinal        *bool    `json:"isFinal,omitempty"`        /// Whether this is the final state (e.g., call answered, ended, etc.)
 }
 
 type PingEvent struct {
