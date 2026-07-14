@@ -103,7 +103,11 @@ func createClient(ctx context.Context, option CreateClientOption, id string) *ru
 		client.History("bot", response)
 	}
 	client.OnHangup = func(event rustpbxgo.HangupEvent) {
-		option.Logger.Infof("Hangup: %s", event.Reason)
+		reason := ""
+		if event.Reason != nil {
+			reason = *event.Reason
+		}
+		option.Logger.Infof("Hangup: %s", reason)
 		//option.SigChan <- true
 	}
 	// Handle ASR Delta events (partial results)

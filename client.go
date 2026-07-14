@@ -15,6 +15,7 @@ import (
 type OnEvent func(event string, payload string)
 type OnIncoming func(event IncomingEvent)
 type OnAnswer func(event AnswerEvent)
+type OnMediaReady func(event MediaReadyEvent)
 type OnReject func(event RejectEvent)
 type OnHangup func(event HangupEvent)
 type OnRinging func(event RingingEvent)
@@ -22,6 +23,9 @@ type OnAnswerMachineDetection func(event AnswerMachineDetectionEvent)
 type OnSpeaking func(event SpeakingEvent)
 type OnSilence func(event SilenceEvent)
 type OnDTMF func(event DTMFEvent)
+type OnHold func(event HoldEvent)
+type OnTransferRequest func(event TransferRequestEvent)
+type OnMessage func(event MessageEvent)
 type OnTrackStart func(event TrackStartEvent)
 type OnTrackEnd func(event TrackEndEvent)
 type OnInterruption func(event InterruptionEvent)
@@ -29,12 +33,15 @@ type OnAsrFinal func(event AsrFinalEvent)
 type OnAsrDelta func(event AsrDeltaEvent)
 type OnLLMFinal func(event LLMFinalEvent)
 type OnLLMDelta func(event LLMDeltaEvent)
+type OnFunctionCall func(event FunctionCallEvent)
 type OnMetrics func(event MetricsEvent)
 type OnError func(event ErrorEvent)
 type OnClose func(reason string)
 type OnAddHistory func(event AddHistoryEvent)
 type OnEou func(event EouEvent)
+type OnInactivity func(event InactivityEvent)
 type OnOther func(event OtherEvent)
+type OnInterrupt func(event InterruptEvent)
 type OnPing func(event PingEvent)
 type OnBinary func(trackIdx int, data []byte)
 type OnCustom func(event CustomEvent)
@@ -54,6 +61,7 @@ type Client struct {
 	OnClose                  OnClose
 	OnEvent                  OnEvent
 	OnIncoming               OnIncoming
+	OnMediaReady             OnMediaReady
 	OnReject                 OnReject
 	OnHangup                 OnHangup
 	OnRinging                OnRinging
@@ -61,6 +69,9 @@ type Client struct {
 	OnSpeaking               OnSpeaking
 	OnSilence                OnSilence
 	OnDTMF                   OnDTMF
+	OnHold                   OnHold
+	OnTransferRequest        OnTransferRequest
+	OnMessage                OnMessage
 	OnTrackStart             OnTrackStart
 	OnTrackEnd               OnTrackEnd
 	OnInterruption           OnInterruption
@@ -68,11 +79,14 @@ type Client struct {
 	OnAsrDelta               OnAsrDelta
 	OnLLMFinal               OnLLMFinal
 	OnLLMDelta               OnLLMDelta
+	OnFunctionCall           OnFunctionCall
 	OnMetrics                OnMetrics
 	OnError                  OnError
 	OnAddHistory             OnAddHistory
 	OnEou                    OnEou
+	OnInactivity             OnInactivity
 	OnOther                  OnOther
+	OnInterrupt              OnInterrupt
 	OnCustom                 OnCustom
 	OnRingbackState          OnRingbackState
 	OnPing                   OnPing
@@ -82,6 +96,8 @@ type Client struct {
 type event struct {
 	Event string `json:"event"`
 }
+
+// --- Call lifecycle events ---
 
 type IncomingEvent struct {
 	TrackID   string `json:"trackId"`
@@ -94,22 +110,27 @@ type AnswerEvent struct {
 	TrackID   string `json:"trackId"`
 	Timestamp uint64 `json:"timestamp"`
 	Sdp       string `json:"sdp"`
-	Refer     bool   `json:"refer"`
+	Refer     *bool  `json:"refer,omitempty"`
+}
+
+type MediaReadyEvent struct {
+	TrackID   string `json:"trackId"`
+	Timestamp uint64 `json:"timestamp"`
 }
 
 type RejectEvent struct {
-	TrackID   string `json:"trackId"`
-	Timestamp uint64 `json:"timestamp"`
-	Reason    string `json:"reason"`
-	Code      uint32 `json:"code"`
-	Refer     bool   `json:"refer"`
+	TrackID   string  `json:"trackId"`
+	Timestamp uint64  `json:"timestamp"`
+	Reason    string  `json:"reason"`
+	Code      *uint32 `json:"code,omitempty"`
+	Refer     *bool   `json:"refer,omitempty"`
 }
 
 type RingingEvent struct {
 	TrackID    string `json:"trackId"`
 	Timestamp  uint64 `json:"timestamp"`
 	EarlyMedia bool   `json:"earlyMedia"`
-	Refer      bool   `json:"refer"`
+	Refer      *bool  `json:"refer,omitempty"`
 }
 
 type HangupEventAttendee struct {
@@ -119,9 +140,10 @@ type HangupEventAttendee struct {
 }
 
 type HangupEvent struct {
+	TrackID     string               `json:"trackId"`
 	Timestamp   uint64               `json:"timestamp"`
-	Reason      string               `json:"reason"`
-	Initiator   string               `json:"initiator"`
+	Reason      *string              `json:"reason,omitempty"`
+	Initiator   *string              `json:"initiator,omitempty"`
 	StartTime   string               `json:"startTime,omitempty"`
 	HangupTime  string               `json:"hangupTime,omitempty"`
 	AnswerTime  *string              `json:"answerTime,omitempty"`
@@ -129,20 +151,26 @@ type HangupEvent struct {
 	From        *HangupEventAttendee `json:"from,omitempty"`
 	To          *HangupEventAttendee `json:"to,omitempty"`
 	Extra       map[string]any       `json:"extra,omitempty"`
-	Refer       bool                 `json:"refer"`
+	Refer       *bool                `json:"refer,omitempty"`
 }
 
 type AnswerMachineDetectionEvent struct {
+	TrackID   string `json:"trackId"`
 	Timestamp uint64 `json:"timestamp"`
 	StartTime uint64 `json:"startTime"`
 	EndTime   uint64 `json:"endTime"`
 	Text      string `json:"text"`
 }
 
+// --- Media / audio events ---
+
 type SpeakingEvent struct {
-	TrackID   string `json:"trackId"`
-	Timestamp uint64 `json:"timestamp"`
-	StartTime uint64 `json:"startTime"`
+	TrackID    string   `json:"trackId"`
+	Timestamp  uint64   `json:"timestamp"`
+	StartTime  uint64   `json:"startTime"`
+	IsFiller   *bool    `json:"isFiller,omitempty"`
+	Confidence *float32 `json:"confidence,omitempty"`
+	Refer      *bool    `json:"refer,omitempty"`
 }
 
 type SilenceEvent struct {
@@ -150,13 +178,42 @@ type SilenceEvent struct {
 	Timestamp uint64 `json:"timestamp"`
 	StartTime uint64 `json:"startTime"`
 	Duration  uint64 `json:"duration"`
+	Refer     *bool  `json:"refer,omitempty"`
 }
 
 type DTMFEvent struct {
 	TrackID   string `json:"trackId"`
 	Timestamp uint64 `json:"timestamp"`
 	Digit     string `json:"digit"`
+	Refer     *bool  `json:"refer,omitempty"`
 }
+
+type HoldEvent struct {
+	TrackID   string `json:"trackId"`
+	Timestamp uint64 `json:"timestamp"`
+	OnHold    bool   `json:"onHold"`
+	Refer     *bool  `json:"refer,omitempty"`
+}
+
+// --- Transfer events ---
+
+type TransferRequestEvent struct {
+	TrackID     string  `json:"trackId"`
+	Timestamp   uint64  `json:"timestamp"`
+	ReferTo     string  `json:"referTo"`
+	ReferredBy  *string `json:"referredBy,omitempty"`
+	Refer       *bool   `json:"refer,omitempty"`
+}
+
+type MessageEvent struct {
+	TrackID     string  `json:"trackId"`
+	Timestamp   uint64  `json:"timestamp"`
+	Body        string  `json:"body"`
+	ContentType *string `json:"contentType,omitempty"`
+	Refer       *bool   `json:"refer,omitempty"`
+}
+
+// --- Track events ---
 
 type TrackStartEvent struct {
 	TrackID   string  `json:"trackId"`
@@ -168,6 +225,7 @@ type TrackEndEvent struct {
 	TrackID   string  `json:"trackId"`
 	Timestamp uint64  `json:"timestamp"`
 	Duration  uint64  `json:"duration"`
+	Ssrc      uint32  `json:"ssrc"`
 	PlayId    *string `json:"playId,omitempty"`
 }
 
@@ -181,25 +239,35 @@ type InterruptionEvent struct {
 	Current       uint32  `json:"current"`
 }
 
+// --- ASR events ---
+
 type AsrFinalEvent struct {
-	TrackID   string  `json:"trackId"`
-	Timestamp uint64  `json:"timestamp"`
-	Index     uint32  `json:"index"`
-	StartTime *uint64 `json:"startTime,omitempty"`
-	EndTime   *uint64 `json:"endTime,omitempty"`
-	Text      string  `json:"text"`
-	TaskID    *string `json:"taskId,omitempty"`
+	TrackID    string   `json:"trackId"`
+	Timestamp  uint64   `json:"timestamp"`
+	Index      uint32   `json:"index"`
+	StartTime  *uint64  `json:"startTime,omitempty"`
+	EndTime    *uint64  `json:"endTime,omitempty"`
+	Text       string   `json:"text"`
+	IsFiller   *bool    `json:"isFiller,omitempty"`
+	Confidence *float32 `json:"confidence,omitempty"`
+	TaskID     *string  `json:"taskId,omitempty"`
+	Refer      *bool    `json:"refer,omitempty"`
 }
 
 type AsrDeltaEvent struct {
-	TrackID   string  `json:"trackId"`
-	Index     uint32  `json:"index"`
-	Timestamp uint64  `json:"timestamp"`
-	StartTime *uint64 `json:"startTime,omitempty"`
-	EndTime   *uint64 `json:"endTime,omitempty"`
-	Text      string  `json:"text"`
-	TaskID    *string `json:"taskId,omitempty"`
+	TrackID    string   `json:"trackId"`
+	Index      uint32   `json:"index"`
+	Timestamp  uint64   `json:"timestamp"`
+	StartTime  *uint64  `json:"startTime,omitempty"`
+	EndTime    *uint64  `json:"endTime,omitempty"`
+	Text       string   `json:"text"`
+	IsFiller   *bool    `json:"isFiller,omitempty"`
+	Confidence *float32 `json:"confidence,omitempty"`
+	TaskID     *string  `json:"taskId,omitempty"`
+	Refer      *bool    `json:"refer,omitempty"`
 }
+
+// --- LLM events ---
 
 type LLMFinalEvent struct {
 	Timestamp uint64 `json:"timestamp"`
@@ -210,6 +278,16 @@ type LLMDeltaEvent struct {
 	Timestamp uint64 `json:"timestamp"`
 	Word      string `json:"word"`
 }
+
+type FunctionCallEvent struct {
+	TrackID   string `json:"trackId"`
+	Timestamp uint64 `json:"timestamp"`
+	CallID    string `json:"callId"`
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
+}
+
+// --- System events ---
 
 type MetricsEvent struct {
 	Timestamp uint64         `json:"timestamp"`
@@ -225,17 +303,26 @@ type ErrorEvent struct {
 	Error     string  `json:"error"`
 	Code      *uint32 `json:"code,omitempty"`
 }
+
 type EouEvent struct {
-	TrackID        string `json:"trackId"`
-	Timestamp      uint64 `json:"timestamp"`
-	Complete       bool   `json:"complete"`
-	InterruptPoint string `json:"interruptPoint,omitempty"`
+	TrackID        string  `json:"trackId"`
+	Timestamp      uint64  `json:"timestamp"`
+	Complete       bool    `json:"complete"`
+	InterruptPoint string  `json:"interruptPoint,omitempty"`
+	Text           *string `json:"text,omitempty"`
+	Refer          *bool   `json:"refer,omitempty"`
 }
-type AddHistoryEvent struct {
-	Sender    string `json:"sender"`
+
+type InactivityEvent struct {
+	TrackID   string `json:"trackId"`
 	Timestamp uint64 `json:"timestamp"`
-	Speaker   string `json:"speaker"`
-	Text      string `json:"text"`
+}
+
+type AddHistoryEvent struct {
+	Sender    *string `json:"sender,omitempty"`
+	Timestamp uint64  `json:"timestamp"`
+	Speaker   string  `json:"speaker"`
+	Text      string  `json:"text"`
 }
 
 type OtherEvent struct {
@@ -252,27 +339,30 @@ type BinaryEvent struct {
 }
 
 type CustomEvent struct {
-	TrackID   string            `json:"trackId"`
-	Timestamp uint64            `json:"timestamp"`
-	Event     string            `json:"event"`
-	Extra     map[string]string `json:"extra,omitempty"`
+	Timestamp uint64          `json:"timestamp"`
+	Sender    *string         `json:"sender,omitempty"`
+	Data      json.RawMessage `json:"data"`
+}
+
+type InterruptEvent struct {
+	Receiver *string `json:"receiver,omitempty"`
+}
+
+type PingEvent struct {
+	Timestamp uint64  `json:"timestamp"`
+	Payload   *string `json:"payload,omitempty"`
 }
 
 type RingbackStateEvent struct {
 	TrackID        string   `json:"trackId"`
 	Timestamp      uint64   `json:"timestamp"`
-	State          string   `json:"state"`                    /// Current line state: "ringing", "human_voice", "busy_tone", "silence", etc.
-	StateIndex     uint32   `json:"stateIndex"`               /// Class index from the TelcoClassifier (3=ringing, 9=human_voice, ...)
-	Confidence     float32  `json:"confidence"`               /// Confidence of the prediction
-	PrevState      *string  `json:"prevState,omitempty"`      /// Previous state (None on first detection)
-	PrevConfidence *float32 `json:"prevConfidence,omitempty"` /// Confidence of the previous state
-	Refer          bool     `json:"refer"`                    /// Whether the call is referred
-	IsFinal        *bool    `json:"isFinal,omitempty"`        /// Whether this is the final state (e.g., call answered, ended, etc.)
-}
-
-type PingEvent struct {
-	Timestamp uint64 `json:"timestamp"`
-	Payload   string `json:"payload,omitempty"`
+	State          string   `json:"state"`          // Current line state: "ringing", "human_voice", "busy_tone", "silence", etc.
+	StateIndex     uint32   `json:"stateIndex"`     // Class index from the TelcoClassifier (3=ringing, 9=human_voice, ...)
+	Confidence     float32  `json:"confidence"`     // Confidence of the prediction
+	PrevState      *string  `json:"prevState,omitempty"`
+	PrevConfidence *float32 `json:"prevConfidence,omitempty"`
+	Refer          *bool    `json:"refer,omitempty"`
+	IsFinal        bool     `json:"isFinal"`
 }
 
 // Command represents WebSocket commands to be sent to the server
@@ -379,10 +469,81 @@ type InterruptionCommand struct {
 	Command string `json:"command"`
 }
 
+// RecorderFormat represents the audio file format for recording
+type RecorderFormat string
+
+const (
+	RecorderFormatWav  RecorderFormat = "wav"
+	RecorderFormatPcm  RecorderFormat = "pcm"
+	RecorderFormatPcmu RecorderFormat = "pcmu"
+	RecorderFormatPcma RecorderFormat = "pcma"
+	RecorderFormatG722 RecorderFormat = "g722"
+)
+
 type RecorderOption struct {
+	// RecorderFile is the path to save the recording file (supports local path or HTTP URL)
 	RecorderFile string `json:"recorderFile,omitempty"`
-	Samplerate   int    `json:"samplerate,omitempty"`
-	Ptime        int    `json:"ptime,omitempty"`
+	// Samplerate is the audio sample rate, default 16000
+	Samplerate int `json:"samplerate,omitempty"`
+	// Ptime is the packet time in milliseconds, default 200
+	Ptime int `json:"ptime,omitempty"`
+	// Format is the recording file format: wav, pcm, pcmu, pcma, g722
+	Format RecorderFormat `json:"format,omitempty"`
+}
+
+// AGCOption represents Automatic Gain Control configuration
+// AGC2 processes audio in fixed 10ms sub-frames to normalize audio levels
+type AGCOption struct {
+	// HeadroomDB is the target headroom below 0 dBFS in dB, default 5.0
+	HeadroomDB *float32 `json:"headroomDb,omitempty"`
+	// MaxGainDB is the maximum gain in dB, default 50.0
+	MaxGainDB *float32 `json:"maxGainDb,omitempty"`
+	// InitialGainDB is the initial gain applied before speech level estimator becomes confident, default 15.0
+	InitialGainDB *float32 `json:"initialGainDb,omitempty"`
+	// MaxGainChangeDBPerSecond is the max gain change in dB per second (attack/release rate), default 6.0
+	MaxGainChangeDBPerSecond *float32 `json:"maxGainChangeDbPerSecond,omitempty"`
+	// MaxOutputNoiseLevelDBFS is the noise floor cap above which AGC will not amplify, default -50.0
+	MaxOutputNoiseLevelDBFS *float32 `json:"maxOutputNoiseLevelDbfs,omitempty"`
+	// AdjacentSpeechFramesThreshold is the number of consecutive speech sub-frames required before allowing gain increase, default 12 (~120ms)
+	AdjacentSpeechFramesThreshold *int32 `json:"adjacentSpeechFramesThreshold,omitempty"`
+	// EnableLimiter runs the limiter after the adaptive gain, default true
+	EnableLimiter *bool `json:"enableLimiter,omitempty"`
+}
+
+// AmbianceOption represents background ambiance (ambient sound) configuration
+// Path supports local file path or HTTP URL (downloaded and cached automatically)
+type AmbianceOption struct {
+	// Path is the audio file path for ambiance (local path or HTTP/HTTPS URL)
+	Path string `json:"path,omitempty"`
+	// DuckLevel is the volume level when server-side is speaking (e.g. TTS), default 0.1
+	DuckLevel *float32 `json:"duckLevel,omitempty"`
+	// NormalLevel is the volume level when server-side is silent, default 0.3
+	NormalLevel *float32 `json:"normalLevel,omitempty"`
+	// TransitionSpeed is the speed of volume transition between duck/normal levels, default 0.01
+	TransitionSpeed *float32 `json:"transitionSpeed,omitempty"`
+	// Enabled controls whether ambiance mixing is active, default true
+	Enabled *bool `json:"enabled,omitempty"`
+}
+
+// RealtimeOption represents configuration for realtime AI APIs (e.g. OpenAI Realtime API, Azure)
+// When set, it creates a RealtimeProcessor and short-circuits VAD/ASR processing
+type RealtimeOption struct {
+	// Provider is the realtime provider: "openai", "azure", or custom
+	Provider string `json:"provider,omitempty"`
+	// Model is the model name (e.g. "gpt-4o-realtime-preview")
+	Model string `json:"model,omitempty"`
+	// SecretKey is the API key for authentication, falls back to OPENAI_API_KEY env var
+	SecretKey string `json:"secretKey,omitempty"`
+	// SecretID is the secret ID for providers that require it (e.g. Azure)
+	SecretID string `json:"secretId,omitempty"`
+	// Endpoint is the custom API endpoint URL
+	Endpoint string `json:"endpoint,omitempty"`
+	// TurnDetection is the turn detection configuration (JSON object, e.g. {"type":"server_vad"})
+	TurnDetection json.RawMessage `json:"turnDetection,omitempty"`
+	// Tools is the list of tool definitions (JSON array) for function calling
+	Tools []json.RawMessage `json:"tools,omitempty"`
+	// Extra is additional provider-specific options
+	Extra map[string]string `json:"extra,omitempty"`
 }
 
 type VADOption struct {
@@ -432,70 +593,149 @@ type TTSOption struct {
 	MaxConcurrentTasks int32             `json:"maxConcurrentTasks,omitempty" comment:"tts max concurrent tasks, 1"`
 }
 
+// SipOption represents SIP protocol options for call setup
 type SipOption struct {
-	Username string            `json:"username,omitempty"`
-	Password string            `json:"password,omitempty"`
-	Realm    string            `json:"realm,omitempty"`
-	Contact  string            `json:"contact,omitempty"`
-	Headers  map[string]string `json:"headers,omitempty"`
+	// Username is the SIP authentication username
+	Username string `json:"username,omitempty"`
+	// Password is the SIP authentication password
+	Password string `json:"password,omitempty"`
+	// Realm is the SIP authentication realm
+	Realm string `json:"realm,omitempty"`
+	// Contact is the SIP contact header URI
+	Contact string `json:"contact,omitempty"`
+	// Headers are custom SIP headers to include in INVITE
+	Headers map[string]string `json:"headers,omitempty"`
+	// HangupHeaders are custom SIP headers to include in BYE
+	HangupHeaders map[string]string `json:"hangupHeaders,omitempty"`
+	// ExtractHeaders is the list of SIP header names to extract and include in events
+	ExtractHeaders []string `json:"extractHeaders,omitempty"`
+	// EnableSRTP enables secure RTP (SRTP) for the call
+	EnableSRTP bool `json:"enableSrtp,omitempty"`
 }
 
 // CallOption represents options for invite/answer commands
 type CallOption struct {
-	Denoise           bool                     `json:"denoise,omitempty"`
-	Offer             string                   `json:"offer,omitempty"`
-	Callee            string                   `json:"callee,omitempty"`
-	Caller            string                   `json:"caller,omitempty"`
-	Recorder          *RecorderOption          `json:"recorder,omitempty"`
-	VAD               *VADOption               `json:"vad,omitempty"`
-	ASR               *ASROption               `json:"asr,omitempty"`
-	TTS               *TTSOption               `json:"tts,omitempty"`
-	HandshakeTimeout  int                      `json:"handshakeTimeout,omitempty"`
-	InactivityTimeout int                      `json:"inactivityTimeout,omitempty"` // in seconds
-	EnableIPv6        bool                     `json:"enableIpv6,omitempty"`
-	Sip               *SipOption               `json:"sip,omitempty"`
-	Extra             map[string]string        `json:"extra,omitempty"`
-	Eou               *EouOption               `json:"eou,omitempty"`
-	MediaPass         *MediaPassOption         `json:"mediaPass,omitempty"`
-	Subscribe         bool                     `json:"subscribe,omitempty"`
+	// Denoise enables noise reduction preprocessing
+	Denoise bool `json:"denoise,omitempty"`
+	// AGC configures Automatic Gain Control for audio level normalization
+	AGC *AGCOption `json:"agc,omitempty"`
+	// Offer is the SDP offer string (bypasses internal SDP generation)
+	Offer string `json:"offer,omitempty"`
+	// Callee is the callee URI (e.g. "sip:bob@example.com" or "1001")
+	Callee string `json:"callee,omitempty"`
+	// Caller is the caller URI (e.g. "sip:alice@example.com")
+	Caller string `json:"caller,omitempty"`
+	// Recorder configures call recording
+	Recorder *RecorderOption `json:"recorder,omitempty"`
+	// VAD configures Voice Activity Detection
+	VAD *VADOption `json:"vad,omitempty"`
+	// ASR configures Automatic Speech Recognition
+	ASR *ASROption `json:"asr,omitempty"`
+	// TTS configures Text-to-Speech synthesis
+	TTS *TTSOption `json:"tts,omitempty"`
+	// MediaPass configures media pass-through via WebSocket
+	MediaPass *MediaPassOption `json:"mediaPass,omitempty"`
+	// HandshakeTimeout is the SIP handshake timeout in seconds
+	HandshakeTimeout int `json:"handshakeTimeout,omitempty"`
+	// EnableIPv6 enables IPv6 for the call
+	EnableIPv6 bool `json:"enableIpv6,omitempty"`
+	// InactivityTimeout is the call inactivity timeout in seconds, default 50
+	InactivityTimeout int `json:"inactivityTimeout,omitempty"`
+	// Sip configures SIP options (credentials, headers, etc.)
+	Sip *SipOption `json:"sip,omitempty"`
+	// Extra is a map of additional custom options
+	Extra map[string]string `json:"extra,omitempty"`
+	// Codec specifies the audio codec (pcmu, pcma, g722, pcm) for websocket calls
+	Codec string `json:"codec,omitempty"`
+	// Ambiance configures background ambiance (ambient sound) mixing
+	Ambiance *AmbianceOption `json:"ambiance,omitempty"`
+	// Eou configures End-of-Utterance detection
+	Eou *EouOption `json:"eou,omitempty"`
+	// Realtime configures realtime AI API (OpenAI/Azure Realtime API), short-circuits VAD/ASR
+	Realtime *RealtimeOption `json:"realtime,omitempty"`
+	// Subscribe enables event subscription for realtime updates
+	Subscribe bool `json:"subscribe,omitempty"`
+	// EnableIceLite enables ICE lite mode (suitable for server-side only)
+	EnableIceLite bool `json:"enableIceLite,omitempty"`
+	// RingbackDetection configures ringback tone detection (busy tone, human voice, etc.)
 	RingbackDetection *RingbackDetectionOption `json:"ringbackDetection,omitempty"`
 }
 
+// MediaPassOption configures media pass-through, routing audio via an external WebSocket server
 type MediaPassOption struct {
-	URL              string `json:"url"`
-	InputSampleRate  int    `json:"inputSampleRate"`
-	OutputSampleRate int    `json:"outputSampleRate"`
-	PacketSize       int    `json:"packetSize,omitempty"`
+	// URL is the WebSocket server URL (e.g. "ws://localhost:8080/")
+	URL string `json:"url"`
+	// InputSampleRate is the sample rate of audio received from the WebSocket
+	InputSampleRate int `json:"inputSampleRate"`
+	// OutputSampleRate is the sample rate of audio sent to the WebSocket server
+	OutputSampleRate int `json:"outputSampleRate"`
+	// PacketSize is the packet size in bytes sent to the WebSocket server, default 3200
+	PacketSize int `json:"packetSize,omitempty"`
+	// Ptime is the packet time in milliseconds; if set, buffers and emits audio at fixed intervals
+	Ptime int `json:"ptime,omitempty"`
 }
 
+// EouOption configures End-of-Utterance detection
 type EouOption struct {
-	Type      string            `json:"type,omitempty"`
-	Endpoint  string            `json:"endpoint,omitempty"`
-	SecretKey string            `json:"secretKey,omitempty"`
-	SecretID  string            `json:"secretId,omitempty"`
-	Timeout   uint32            `json:"timeout,omitempty"`
-	Extra     map[string]string `json:"extra,omitempty"`
+	// Type is the EOU detection provider type
+	Type string `json:"type,omitempty"`
+	// Endpoint is the EOU service endpoint URL
+	Endpoint string `json:"endpoint,omitempty"`
+	// SecretKey is the API key for the EOU service
+	SecretKey string `json:"secretKey,omitempty"`
+	// SecretID is the secret ID for the EOU service
+	SecretID string `json:"secretId,omitempty"`
+	// Timeout is the max timeout in milliseconds for EOU detection
+	Timeout uint32 `json:"timeout,omitempty"`
+	// Extra is additional provider-specific options
+	Extra map[string]string `json:"extra,omitempty"`
 }
 
-// ReferOption represents options for refer command
+// ReferOption represents options for the refer (call transfer) command
 type ReferOption struct {
-	Denoise     bool       `json:"denoise,omitempty"`
-	Timeout     uint32     `json:"timeout,omitempty"`
-	MusicOnHold string     `json:"moh,omitempty"`
-	AutoHangup  bool       `json:"autoHangup,omitempty"`
-	Sip         *SipOption `json:"sip,omitempty"`
-	ASR         *ASROption `json:"asr,omitempty"`
+	// Denoise enables noise reduction for the refer call
+	Denoise bool `json:"denoise,omitempty"`
+	// AGC configures Automatic Gain Control for the refer call
+	AGC *AGCOption `json:"agc,omitempty"`
+	// Timeout is the refer call timeout in seconds
+	Timeout uint32 `json:"timeout,omitempty"`
+	// MusicOnHold is the music-on-hold audio URL played to the caller during transfer
+	MusicOnHold string `json:"moh,omitempty"`
+	// VAD configures Voice Activity Detection for the refer call
+	VAD *VADOption `json:"vad,omitempty"`
+	// ASR configures Automatic Speech Recognition for the refer call
+	ASR *ASROption `json:"asr,omitempty"`
+	// AutoHangup hangs up the parent call after the refer call ends
+	AutoHangup bool `json:"autoHangup,omitempty"`
+	// Sip configures SIP options for the refer call (credentials, headers, etc.)
+	Sip *SipOption `json:"sip,omitempty"`
+	// CallID specifies the call ID to transfer (for attended transfer)
+	CallID string `json:"callId,omitempty"`
+	// PauseParentASR pauses the parent call's ASR during the refer call, resumes after refer ends (if autoHangup is false)
+	PauseParentASR bool `json:"pauseParentAsr,omitempty"`
+	// ForwardDTMF forwards DTMF tones between the main call and the refer call; default false
+	ForwardDTMF bool `json:"forwardDtmf,omitempty"`
 }
+
+// RingbackDetectionOption configures ringback tone (TelcoClassifier) detection
+// Detects call progress states: ringing, human_voice, busy_tone, silence, etc.
 type RingbackDetectionOption struct {
+	// Enabled enables ringback detection
 	Enabled bool `json:"enabled,omitempty"`
-	/// Minimum audio accumulation (seconds) before first inference, minimum value is 4.0 second, default is 6.0 seconds
+	// ModelWeightsPath is the path to telcoclassifier_weights.bin, default "./telcoclassifier_weights.bin"
+	ModelWeightsPath string `json:"modelWeightsPath,omitempty"`
+	// MinBufferSecs is the minimum audio accumulation (seconds) before first inference, minimum 4.0, default 6.0
 	MinBufferSecs float32 `json:"minBufferSecs,omitempty"`
-	/// Seconds between consecutive inferences
+	// DetectionIntervalSecs is the seconds between consecutive inferences
 	DetectionIntervalSecs float32 `json:"detectionIntervalSecs,omitempty"`
-	/// Confidence threshold for reporting a state
+	// ConfidenceThreshold is the confidence threshold for reporting a state
 	ConfidenceThreshold float32 `json:"confidenceThreshold,omitempty"`
-	/// Only emit events on state change (ringing→human_voice etc.)
+	// OnStateChangeOnly emits events only on state change (ringing->human_voice etc.)
 	OnStateChangeOnly bool `json:"onStateChangeOnly,omitempty"`
+	// SlidingWindowSize is the sliding window size for result accumulation, default 6
+	SlidingWindowSize int `json:"slidingWindowSize,omitempty"`
+	// FinalConfidenceThreshold is the confidence threshold for immediate finalization, default 0.9
+	FinalConfidenceThreshold float32 `json:"finalConfidenceThreshold,omitempty"`
 }
 type ClientOption func(*Client)
 
@@ -683,6 +923,15 @@ func (c *Client) processEvent(message []byte) {
 		if c.onAnswer != nil {
 			c.onAnswer(event)
 		}
+	case "mediaReady":
+		var event MediaReadyEvent
+		if err := json.Unmarshal(message, &event); err != nil {
+			c.logger.Errorf("Error unmarshalling mediaReady event: %v", err)
+			return
+		}
+		if c.OnMediaReady != nil {
+			c.OnMediaReady(event)
+		}
 	case "reject":
 		var event RejectEvent
 		if err := json.Unmarshal(message, &event); err != nil {
@@ -745,6 +994,33 @@ func (c *Client) processEvent(message []byte) {
 		}
 		if c.OnDTMF != nil {
 			c.OnDTMF(event)
+		}
+	case "hold":
+		var event HoldEvent
+		if err := json.Unmarshal(message, &event); err != nil {
+			c.logger.Errorf("Error unmarshalling hold event: %v", err)
+			return
+		}
+		if c.OnHold != nil {
+			c.OnHold(event)
+		}
+	case "transferRequest":
+		var event TransferRequestEvent
+		if err := json.Unmarshal(message, &event); err != nil {
+			c.logger.Errorf("Error unmarshalling transferRequest event: %v", err)
+			return
+		}
+		if c.OnTransferRequest != nil {
+			c.OnTransferRequest(event)
+		}
+	case "message":
+		var event MessageEvent
+		if err := json.Unmarshal(message, &event); err != nil {
+			c.logger.Errorf("Error unmarshalling message event: %v", err)
+			return
+		}
+		if c.OnMessage != nil {
+			c.OnMessage(event)
 		}
 	case "trackStart":
 		var event TrackStartEvent
@@ -809,6 +1085,15 @@ func (c *Client) processEvent(message []byte) {
 		if c.OnLLMDelta != nil {
 			c.OnLLMDelta(event)
 		}
+	case "functionCall":
+		var event FunctionCallEvent
+		if err := json.Unmarshal(message, &event); err != nil {
+			c.logger.Errorf("Error unmarshalling functionCall event: %v", err)
+			return
+		}
+		if c.OnFunctionCall != nil {
+			c.OnFunctionCall(event)
+		}
 	case "metrics":
 		var event MetricsEvent
 		if err := json.Unmarshal(message, &event); err != nil {
@@ -844,6 +1129,24 @@ func (c *Client) processEvent(message []byte) {
 		}
 		if c.OnEou != nil {
 			c.OnEou(event)
+		}
+	case "inactivity":
+		var event InactivityEvent
+		if err := json.Unmarshal(message, &event); err != nil {
+			c.logger.Errorf("Error unmarshalling inactivity event: %v", err)
+			return
+		}
+		if c.OnInactivity != nil {
+			c.OnInactivity(event)
+		}
+	case "interrupt":
+		var event InterruptEvent
+		if err := json.Unmarshal(message, &event); err != nil {
+			c.logger.Errorf("Error unmarshalling interrupt event: %v", err)
+			return
+		}
+		if c.OnInterrupt != nil {
+			c.OnInterrupt(event)
 		}
 	case "ping":
 		var event PingEvent
@@ -920,7 +1223,11 @@ func (c *Client) Invite(ctx context.Context, option CallOption) (*AnswerEvent, e
 		select {
 		case ch <- event:
 		default:
-			c.logger.Errorf("Hangup event channel is full, dropping event: %s", event.Reason)
+			reason := ""
+			if event.Reason != nil {
+				reason = *event.Reason
+			}
+			c.logger.Errorf("Hangup event channel is full, dropping event: %s", reason)
 			onHangup(event)
 		}
 	}
@@ -952,7 +1259,11 @@ func (c *Client) Invite(ctx context.Context, option CallOption) (*AnswerEvent, e
 			return nil, errors.New(event.Reason)
 		}
 		if event, ok := event.(HangupEvent); ok {
-			return nil, errors.New(event.Reason)
+			reason := ""
+			if event.Reason != nil {
+				reason = *event.Reason
+			}
+			return nil, errors.New(reason)
 		}
 		return nil, errors.New("invalid event type")
 	}
