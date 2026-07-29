@@ -100,11 +100,12 @@ type event struct {
 // --- Call lifecycle events ---
 
 type IncomingEvent struct {
-	TrackID   string `json:"trackId"`
-	Timestamp uint64 `json:"timestamp"`
-	Caller    string `json:"caller"`
-	Callee    string `json:"callee"`
-	Sdp       string `json:"sdp"`
+	TrackID   string            `json:"trackId"`
+	Timestamp uint64            `json:"timestamp"`
+	Caller    string            `json:"caller"`
+	Callee    string            `json:"callee"`
+	Sdp       string            `json:"sdp"`
+	Headers   map[string]string `json:"headers,omitempty"`
 }
 type AnswerEvent struct {
 	TrackID   string `json:"trackId"`
