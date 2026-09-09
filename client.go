@@ -7,6 +7,9 @@ import (
 	"fmt"
 	"runtime"
 	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/sirupsen/logrus"
@@ -57,6 +60,10 @@ type Client struct {
 	logger                   *logrus.Logger
 	id                       string
 	dumpEvents               bool
+	eventWG                  sync.WaitGroup
+	closeReasonMu            sync.Mutex
+	closeReason              string
+	inviteTap                atomic.Pointer[inviteTap]
 	onAnswer                 OnAnswer
 	OnClose                  OnClose
 	OnEvent                  OnEvent
@@ -95,6 +102,55 @@ type Client struct {
 
 type event struct {
 	Event string `json:"event"`
+}
+
+// inviteTap intercepts the first answer/error/reject/hangup event for a
+// pending Invite() call, without swapping the user-visible callbacks (the
+// old approach replaced OnHangup etc. temporarily, which raced with events
+// being processed concurrently). Accessed only via atomic.Pointer.
+type inviteTap struct {
+	ch chan any
+}
+
+func (t *inviteTap) handle(name string, payload []byte) bool {
+	switch name {
+	case "answer":
+		var ev AnswerEvent
+		if err := json.Unmarshal(payload, &ev); err != nil {
+			return false
+		}
+		return t.trySend(ev)
+	case "error":
+		var ev ErrorEvent
+		if err := json.Unmarshal(payload, &ev); err != nil {
+			return false
+		}
+		return t.trySend(ev)
+	case "reject":
+		var ev RejectEvent
+		if err := json.Unmarshal(payload, &ev); err != nil {
+			return false
+		}
+		return t.trySend(ev)
+	case "hangup":
+		var ev HangupEvent
+		if err := json.Unmarshal(payload, &ev); err != nil {
+			return false
+		}
+		return t.trySend(ev)
+	}
+	return false
+}
+
+func (t *inviteTap) trySend(ev any) bool {
+	select {
+	case t.ch <- ev:
+		return true
+	default:
+		// Already answered (or channel full): fall through to the user
+		// callbacks, matching the old overflow behavior.
+		return false
+	}
 }
 
 // --- Call lifecycle events ---
@@ -199,11 +255,11 @@ type HoldEvent struct {
 // --- Transfer events ---
 
 type TransferRequestEvent struct {
-	TrackID     string  `json:"trackId"`
-	Timestamp   uint64  `json:"timestamp"`
-	ReferTo     string  `json:"referTo"`
-	ReferredBy  *string `json:"referredBy,omitempty"`
-	Refer       *bool   `json:"refer,omitempty"`
+	TrackID    string  `json:"trackId"`
+	Timestamp  uint64  `json:"timestamp"`
+	ReferTo    string  `json:"referTo"`
+	ReferredBy *string `json:"referredBy,omitempty"`
+	Refer      *bool   `json:"refer,omitempty"`
 }
 
 type MessageEvent struct {
@@ -357,9 +413,9 @@ type PingEvent struct {
 type RingbackStateEvent struct {
 	TrackID        string   `json:"trackId"`
 	Timestamp      uint64   `json:"timestamp"`
-	State          string   `json:"state"`          // Current line state: "ringing", "human_voice", "busy_tone", "silence", etc.
-	StateIndex     uint32   `json:"stateIndex"`     // Class index from the TelcoClassifier (3=ringing, 9=human_voice, ...)
-	Confidence     float32  `json:"confidence"`     // Confidence of the prediction
+	State          string   `json:"state"`      // Current line state: "ringing", "human_voice", "busy_tone", "silence", etc.
+	StateIndex     uint32   `json:"stateIndex"` // Class index from the TelcoClassifier (3=ringing, 9=human_voice, ...)
+	Confidence     float32  `json:"confidence"` // Confidence of the prediction
 	PrevState      *string  `json:"prevState,omitempty"`
 	PrevConfidence *float32 `json:"prevConfidence,omitempty"`
 	Refer          *bool    `json:"refer,omitempty"`
@@ -804,7 +860,15 @@ func (c *Client) Connect(callType string) error {
 	c.eventChan = make(chan []byte, chanSize)
 	c.cmdChan = make(chan any, chanSize)
 
+	// readLoop is the only producer of eventChan and the only place that
+	// closes it (via defer, covering every exit path: read error, Shutdown
+	// while blocked on a full channel, panic). The event loop relies on that
+	// close to terminate its drain, so this must never be skipped. It never
+	// fires OnClose itself: firing it here would race with events still
+	// queued (or being processed) — e.g. the server's hangup event, which is
+	// always followed by the close frame.
 	go func() {
+		defer close(c.eventChan)
 		defer func() {
 			if r := recover(); r != nil {
 				var buf [4096]byte
@@ -816,9 +880,7 @@ func (c *Client) Connect(callType string) error {
 			mt, message, err := c.conn.ReadMessage()
 			if err != nil {
 				c.logger.Errorf("Error reading message: %v", err)
-				if c.OnClose != nil {
-					c.OnClose(err.Error())
-				}
+				c.setCloseReason(err.Error())
 				return
 			}
 			if mt == websocket.BinaryMessage {
@@ -837,31 +899,31 @@ func (c *Client) Connect(callType string) error {
 				c.logger.Debugf("Received non-text message: %v", mt)
 				continue
 			}
+			// Backpressure instead of dropping: a full channel must never
+			// silently discard lifecycle events such as hangup.
 			select {
 			case c.eventChan <- message:
 			case <-c.ctx.Done():
 				return
-			default:
-				c.logger.Warnf("Event channel is full, dropping message: %s", string(message))
 			}
 		}
 	}()
 
+	// cmdLoop is the only writer on the websocket connection (gorilla allows
+	// at most one concurrent writer). It never closes cmdChan: sendCommand
+	// unblocks through ctx instead, so a late command cannot panic on a
+	// closed channel.
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
 				var buf [4096]byte
 				runtime.Stack(buf[:], false)
-				c.logger.Errorf("Panic in event processing loop: %v \n%s", r, string(buf[:]))
+				c.logger.Errorf("Panic in command loop: %v \n%s", r, string(buf[:]))
 			}
-			close(c.eventChan)
-			c.conn.Close()
 		}()
-
 		for {
 			select {
 			case <-c.ctx.Done():
-				c.logger.Info("Context cancelled, shutting down event processing")
 				return
 			case cmd, ok := <-c.cmdChan:
 				if !ok {
@@ -871,20 +933,92 @@ func (c *Client) Connect(callType string) error {
 				c.logger.WithFields(logrus.Fields{
 					"command": cmd,
 				}).Debug("Sending command")
-				err = c.conn.WriteJSON(cmd)
-				if err != nil {
+				// Bound the write: a dead peer must not block this goroutine
+				// (and with it the teardown chain) indefinitely.
+				_ = c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+				if err := c.conn.WriteJSON(cmd); err != nil {
 					c.logger.Errorf("Error sending command: %v", err)
+					// Close the connection so the read loop errors out and
+					// the event loop can drain + tear down promptly;
+					// otherwise sendCommand callers could block on a full
+					// cmdChan until the next read error arrives on its own.
+					c.conn.Close()
 					return
 				}
+			}
+		}
+	}()
+
+	// eventLoop drains eventChan and dispatches each event for concurrent
+	// processing, tracking them with eventWG. The invariant: OnClose only
+	// fires AFTER every event received before the connection closed has been
+	// fully processed (eventWG.Wait). On Shutdown (ctx cancelled) pending
+	// events are still drained, but OnClose is not fired (original behavior).
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				var buf [4096]byte
+				runtime.Stack(buf[:], false)
+				c.logger.Errorf("Panic in event processing loop: %v \n%s", r, string(buf[:]))
+			}
+			// Wait for all in-flight processEvent goroutines (including the
+			// ones drained after ctx cancellation) to complete, so that
+			// OnClose is always the last callback the application sees.
+			c.eventWG.Wait()
+			if reason := c.takeCloseReason(); reason != "" && c.ctx.Err() == nil {
+				if c.OnClose != nil {
+					c.OnClose(reason)
+				}
+			}
+			c.cancel()
+			c.conn.Close()
+		}()
+
+		for {
+			select {
 			case message, ok := <-c.eventChan:
 				if !ok {
 					return
 				}
-				go c.processEvent(message)
+				c.eventWG.Add(1)
+				go func() {
+					defer c.eventWG.Done()
+					c.processEvent(message)
+				}()
+			case <-c.ctx.Done():
+				// Shutdown: unblock the read loop (its defer closes
+				// eventChan, which terminates the drain below), then drain
+				// everything already queued.
+				c.logger.Info("Context cancelled, draining pending events")
+				c.conn.Close()
+				for message := range c.eventChan {
+					c.eventWG.Add(1)
+					go func() {
+						defer c.eventWG.Done()
+						c.processEvent(message)
+					}()
+				}
+				return
 			}
 		}
 	}()
 	return nil
+}
+
+// setCloseReason records why the connection ended (first writer wins).
+func (c *Client) setCloseReason(reason string) {
+	c.closeReasonMu.Lock()
+	defer c.closeReasonMu.Unlock()
+	if c.closeReason == "" {
+		c.closeReason = reason
+	}
+}
+
+// takeCloseReason returns the recorded close reason, if any.
+func (c *Client) takeCloseReason() string {
+	c.closeReasonMu.Lock()
+	defer c.closeReasonMu.Unlock()
+	return c.closeReason
 }
 
 func (c *Client) processEvent(message []byte) {
@@ -904,6 +1038,12 @@ func (c *Client) processEvent(message []byte) {
 	c.logger.Debugf("Received event: %s %s", ev.Event, string(message))
 	if c.OnEvent != nil {
 		c.OnEvent(ev.Event, string(message))
+	}
+	// A pending Invite() consumes the first answer/error/reject/hangup event
+	// via the tap (non-blocking); if the tap declines (different event, or
+	// already answered) the event falls through to the user callbacks below.
+	if t := c.inviteTap.Load(); t != nil && t.handle(ev.Event, message) {
+		return
 	}
 	switch ev.Event {
 	case "incoming":
@@ -1190,54 +1330,23 @@ func (c *Client) processEvent(message []byte) {
 	}
 }
 func (c *Client) Shutdown() error {
-	c.cancel()
+	if c.cancel != nil {
+		c.cancel()
+	}
 	return nil
 }
 
 // It returns a channel that will receive the answer event
 func (c *Client) Invite(ctx context.Context, option CallOption) (*AnswerEvent, error) {
-	onAnswer := c.onAnswer
+	// Register an internal tap instead of temporarily replacing OnAnswer /
+	// OnError / OnReject / OnHangup: swapping those fields from this
+	// goroutine raced with processEvent goroutines reading them. The tap is
+	// consulted from processEvent under an atomic pointer; the first
+	// answer/error/reject/hangup event is routed to ch, anything else (and
+	// any overflow) falls through to the user callbacks as before.
 	ch := make(chan any, 1)
-	c.onAnswer = func(event AnswerEvent) {
-		ch <- event
-	}
-	onError := c.OnError
-	c.OnError = func(event ErrorEvent) {
-		select {
-		case ch <- event:
-		default:
-			c.logger.Errorf("Error event channel is full, dropping event: %s", event.Error)
-			onError(event)
-		}
-	}
-	onReject := c.OnReject
-	c.OnReject = func(event RejectEvent) {
-		select {
-		case ch <- event:
-		default:
-			c.logger.Errorf("Reject event channel is full, dropping event: %s", event.Reason)
-			onReject(event)
-		}
-	}
-	onHangup := c.OnHangup
-	c.OnHangup = func(event HangupEvent) {
-		select {
-		case ch <- event:
-		default:
-			reason := ""
-			if event.Reason != nil {
-				reason = *event.Reason
-			}
-			c.logger.Errorf("Hangup event channel is full, dropping event: %s", reason)
-			onHangup(event)
-		}
-	}
-	defer func() {
-		c.onAnswer = onAnswer
-		c.OnError = onError
-		c.OnReject = onReject
-		c.OnHangup = onHangup
-	}()
+	c.inviteTap.Store(&inviteTap{ch: ch})
+	defer c.inviteTap.Store(nil)
 	cmd := InviteCommand{
 		Command: "invite",
 		Option:  option,
@@ -1422,10 +1531,18 @@ func (c *Client) History(speaker string, text string) error {
 
 // sendCommand sends a command to the server
 func (c *Client) sendCommand(cmd any) error {
-	// Implementation will be added when the WebSocket connection is implemented
 	if c.conn == nil {
 		return errors.New("client not initialized")
 	}
-	c.cmdChan <- cmd
-	return nil
+	if c.ctx == nil {
+		return errors.New("client not connected")
+	}
+	// cmdChan is never closed, so the send cannot panic; it unblocks through
+	// ctx once the loops are shutting down.
+	select {
+	case c.cmdChan <- cmd:
+		return nil
+	case <-c.ctx.Done():
+		return errors.New("client is shut down")
+	}
 }
