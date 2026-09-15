@@ -160,6 +160,7 @@ func main() {
 	var speaker string = "601003"
 	var callWithSip bool = false
 	var record bool = false
+	var native8k bool = false
 	var ttsProvider string = "tencent"
 	var asrProvider string = "tencent"
 	var caller string = ""
@@ -202,6 +203,7 @@ func main() {
 	flag.BoolVar(&breakOnVad, "break-on-vad", breakOnVad, "Break on VAD")
 	flag.BoolVar(&callWithSip, "sip", callWithSip, "Call with SIP")
 	flag.BoolVar(&record, "record", record, "Record the call")
+	flag.BoolVar(&native8k, "native8k", native8k, "Record at native sample rate (e.g. 8kHz for PCMU) instead of 16kHz")
 	flag.StringVar(&ttsProvider, "tts", ttsProvider, "TTS provider to use: tencent, voiceapi")
 	flag.StringVar(&asrProvider, "asr", asrProvider, "ASR provider to use: tencent, voiceapi")
 	flag.StringVar(&speaker, "speaker", speaker, "Speaker to use")
@@ -304,6 +306,9 @@ func main() {
 	if record {
 		recorder = &rustpbxgo.RecorderOption{
 			Samplerate: 16000,
+		}
+		if native8k {
+			recorder.NativeSamplerate = &native8k
 		}
 	}
 	var asrOption *rustpbxgo.ASROption

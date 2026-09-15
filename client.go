@@ -546,6 +546,10 @@ type RecorderOption struct {
 	Ptime int `json:"ptime,omitempty"`
 	// Format is the recording file format: wav, pcm, pcmu, pcma, g722
 	Format RecorderFormat `json:"format,omitempty"`
+	// NativeSamplerate records at the wire's native sample rate (e.g. 8kHz
+	// for PCMU/PCMA, 16kHz for G722, 48kHz for Opus) instead of resampling
+	// to 16kHz; Samplerate is only used as a fallback if native detection fails
+	NativeSamplerate *bool `json:"nativeSamplerate,omitempty"`
 }
 
 // AGCOption represents Automatic Gain Control configuration
